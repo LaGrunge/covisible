@@ -1338,7 +1338,7 @@ h3 {
 
 .directory-table {
     border-collapse: collapse;
-    table-layout: fixed;
+    width: 100%;
 }
 
 .directory-table thead tr:first-child th {
@@ -1350,21 +1350,25 @@ h3 {
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-secondary);
-    padding: var(--spacing-xs) var(--spacing-md);
+    padding: var(--spacing-xs) var(--spacing-sm);
 }
 
-/* Fixed column widths for directory table */
+/* Responsive column sizing */
+.directory-table th,
+.directory-table td {
+    padding: var(--spacing-xs) var(--spacing-sm);
+}
+
 .directory-table th:first-child,
 .directory-table td:first-child {
-    width: 35%;
-}
-
-.directory-table .coverage-cell {
-    width: 140px;
+    width: auto;
+    min-width: 120px;
 }
 
 .directory-table .text-center {
-    width: 70px;
+    width: auto;
+    min-width: 50px;
+    white-space: nowrap;
 }
 
 .directory-row:hover {
@@ -1505,13 +1509,13 @@ h3 {
 .coverage-cell {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-xs);
     white-space: nowrap;
 }
 
 .lcov-bar {
-    width: 70px;
-    height: 12px;
+    width: 50px;
+    height: 10px;
     background: linear-gradient(to right, var(--color-uncovered) 0%, var(--color-uncovered) 100%);
     border-radius: 2px;
     overflow: hidden;
@@ -1521,7 +1525,8 @@ h3 {
 
 .coverage-cell span {
     display: inline-block;
-    min-width: 50px;
+    min-width: 45px;
+    font-size: var(--font-size-sm);
 }
 
 .lcov-bar-fill {
@@ -1752,6 +1757,24 @@ h3 {
 }
 
 /* ===== Responsive ===== */
+@media (max-width: 1200px) {
+    /* Hide Total/Hit columns on medium screens */
+    .directory-table th:nth-child(3),
+    .directory-table td:nth-child(3),
+    .directory-table th:nth-child(4),
+    .directory-table td:nth-child(4),
+    .directory-table th:nth-child(6),
+    .directory-table td:nth-child(6),
+    .directory-table th:nth-child(7),
+    .directory-table td:nth-child(7) {
+        display: none;
+    }
+    
+    .directory-table .subheader {
+        display: none;
+    }
+}
+
 @media (max-width: 768px) {
     .main {
         padding: var(--spacing-md);
@@ -1759,6 +1782,19 @@ h3 {
 
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stats-row {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+    
+    .stat-item {
+        min-width: auto;
+    }
+    
+    .tab-nav {
+        flex-wrap: wrap;
     }
 
     .charts-section {
@@ -1773,5 +1809,38 @@ h3 {
     .treemap-cell {
         min-width: 60px;
         min-height: 60px;
+    }
+    
+    /* Smaller coverage bars on mobile */
+    .lcov-bar {
+        width: 40px;
+        height: 8px;
+    }
+    
+    .coverage-cell span {
+        min-width: 40px;
+        font-size: 12px;
+    }
+    
+    .dir-name {
+        font-size: var(--font-size-sm);
+    }
+    
+    .file-icon {
+        min-width: 24px;
+        height: 18px;
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Hide Function Coverage on very small screens */
+    .directory-table th:nth-child(5),
+    .directory-table td:nth-child(5) {
+        display: none;
+    }
+    
+    .directory-table thead tr:first-child th[colspan="3"]:last-of-type {
+        display: none;
     }
 }
