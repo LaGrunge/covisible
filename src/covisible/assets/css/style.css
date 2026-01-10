@@ -28,22 +28,22 @@
     --color-warning: #f59e0b;
     --color-danger: #ef4444;
 
-    /* Spacing */
+    /* Spacing - balanced for 2K screens */
     --spacing-xs: 0.25rem;
     --spacing-sm: 0.5rem;
     --spacing-md: 1rem;
     --spacing-lg: 1.5rem;
     --spacing-xl: 2rem;
 
-    /* Typography */
+    /* Typography - larger base sizes for 2K screens */
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Monaco, Consolas, monospace;
-    --font-size-sm: 0.875rem;
-    --font-size-base: 1rem;
-    --font-size-lg: 1.125rem;
-    --font-size-xl: 1.25rem;
-    --font-size-2xl: 1.5rem;
-    --font-size-3xl: 2rem;
+    --font-size-sm: 1rem;
+    --font-size-base: 1.125rem;
+    --font-size-lg: 1.25rem;
+    --font-size-xl: 1.5rem;
+    --font-size-2xl: 2rem;
+    --font-size-3xl: 2.5rem;
 
     /* Borders */
     --radius-sm: 0.25rem;
@@ -117,8 +117,9 @@ a:hover {
 }
 
 .header-content {
-    max-width: 1400px;
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
+    padding: 0 var(--spacing-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -153,12 +154,13 @@ a:hover {
 
 .main {
     flex: 1;
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg) var(--spacing-xl);
 }
 
 .container {
-    max-width: 1400px;
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
+    padding: 0 var(--spacing-md);
 }
 
 .footer {
@@ -305,19 +307,19 @@ h3 {
 
 /* ===== Summary Header Section ===== */
 .summary-header-section {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
 }
 
 .stats-row {
     display: flex;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
     flex-wrap: wrap;
 }
 
 .stat-item {
     flex: 1;
-    min-width: 150px;
-    padding: var(--spacing-md) var(--spacing-lg);
+    min-width: 120px;
+    padding: var(--spacing-sm) var(--spacing-md);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -340,7 +342,7 @@ h3 {
 }
 
 .stat-item .stat-value {
-    font-size: var(--font-size-2xl);
+    font-size: var(--font-size-xl);
     font-weight: 700;
     color: var(--text-primary);
 }
@@ -358,18 +360,18 @@ h3 {
 }
 
 .stat-item .stat-label {
-    font-size: var(--font-size-sm);
+    font-size: 0.8rem;
     color: var(--text-muted);
-    margin-top: var(--spacing-xs);
+    margin-top: 2px;
 }
 
 /* ===== Tab Navigation ===== */
 .tab-nav {
     display: flex;
     gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     border-bottom: 2px solid var(--border-color);
-    padding-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-xs);
 }
 
 .tab-btn {
@@ -1395,11 +1397,11 @@ h3 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 20px;
-    padding: 0 4px;
-    border-radius: 3px;
-    font-size: 10px;
+    min-width: 36px;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 700;
     font-family: var(--font-mono);
     text-transform: uppercase;
@@ -1514,10 +1516,10 @@ h3 {
 }
 
 .lcov-bar {
-    width: 50px;
-    height: 10px;
+    width: 80px;
+    height: 14px;
     background: linear-gradient(to right, var(--color-uncovered) 0%, var(--color-uncovered) 100%);
-    border-radius: 2px;
+    border-radius: 3px;
     overflow: hidden;
     flex-shrink: 0;
     display: inline-block;
@@ -1525,8 +1527,8 @@ h3 {
 
 .coverage-cell span {
     display: inline-block;
-    min-width: 45px;
-    font-size: var(--font-size-sm);
+    min-width: 55px;
+    font-size: var(--font-size-base);
 }
 
 .lcov-bar-fill {
@@ -1757,7 +1759,7 @@ h3 {
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
     /* Hide Total/Hit columns on medium screens */
     .directory-table th:nth-child(3),
     .directory-table td:nth-child(3),
@@ -1772,6 +1774,17 @@ h3 {
     
     .directory-table .subheader {
         display: none;
+    }
+}
+
+@media (max-width: 1024px) {
+    .main {
+        padding: var(--spacing-lg);
+    }
+    
+    .lcov-bar {
+        width: 60px;
+        height: 12px;
     }
 }
 
@@ -1813,13 +1826,13 @@ h3 {
     
     /* Smaller coverage bars on mobile */
     .lcov-bar {
-        width: 40px;
-        height: 8px;
+        width: 50px;
+        height: 10px;
     }
     
     .coverage-cell span {
-        min-width: 40px;
-        font-size: 12px;
+        min-width: 45px;
+        font-size: 14px;
     }
     
     .dir-name {
@@ -1827,9 +1840,9 @@ h3 {
     }
     
     .file-icon {
-        min-width: 24px;
-        height: 18px;
-        font-size: 9px;
+        min-width: 28px;
+        height: 20px;
+        font-size: 10px;
     }
 }
 
