@@ -123,11 +123,23 @@
         return val.toFixed(1) + '%';
     }
 
-    function navigateTo(path) {
+    function navigateTo(path, pushState = true) {
         currentPath = path;
         updateStats(path);
         updateTable(path);
+        
+        // Update browser history
+        if (pushState) {
+            const url = path ? '#' + path : '#';
+            history.pushState({ path: path }, '', url);
+        }
     }
+    
+    // Handle browser back/forward
+    window.addEventListener('popstate', function(event) {
+        const path = event.state ? event.state.path : '';
+        navigateTo(path, false);
+    });
 
     function updateStats(path) {
         let stats = rootStats;
@@ -280,9 +292,12 @@
         });
     }
 
-    // Initialize
+    // Initialize from URL hash or default
     document.addEventListener('DOMContentLoaded', function() {
-        navigateTo('');
+        const hash = window.location.hash.slice(1); // Remove #
+        navigateTo(hash || '', false);
+        // Replace initial state
+        history.replaceState({ path: hash || '' }, '', window.location.href);
     });
     </script>
 </div>
