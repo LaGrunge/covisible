@@ -148,6 +148,7 @@ class ReportGenerator:
             context["files"] = [
                 {
                     "path": str(path),
+                    "rel_path": str(self._get_relative_path(path)),
                     "name": path.name,
                     "total_lines": file_cov.total_lines,
                     "covered_lines": file_cov.covered_lines,

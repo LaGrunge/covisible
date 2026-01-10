@@ -64,38 +64,26 @@
 
     <!-- Tab: All Files -->
     <div class="tab-content" id="tab-files">
-        <div class="search-box">
+        <div class="files-toolbar">
             <input type="text" id="file-search" class="search-input" placeholder="🔍 Search files...">
+            <div class="sort-buttons">
+                <button class="sort-btn active" data-sort="uncovered">Uncovered ↓</button>
+                <button class="sort-btn" data-sort="coverage">Coverage ↑</button>
+                <button class="sort-btn" data-sort="name">Name A-Z</button>
+            </div>
         </div>
-        <div class="files-table-container">
-            <table class="files-table" id="files-table">
-                <thead>
-                    <tr>
-                        <th class="sortable" data-sort="name">File</th>
-                        <th class="sortable" data-sort="coverage">Coverage</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for file in files %}
-                    <tr class="file-row" data-path="{{ file.path }}">
-                        <td class="file-name">
-                            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html">
-                                📄 {{ file.name }}
-                            </a>
-                            <span class="file-path">{{ file.path }}</span>
-                        </td>
-                        <td>
-                            <div class="coverage-bar-container">
-                                <div class="coverage-bar {{ file.coverage_percent|coverage_class }}" style="width: {{ file.coverage_percent }}%"></div>
-                                <span class="coverage-text {{ file.coverage_percent|coverage_class }}">
-                                    {{ file.coverage_percent|format_percent }}
-                                </span>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="files-list" id="files-list">
+            {% for file in files %}
+            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html" 
+               class="file-list-item" 
+               data-path="{{ file.rel_path or file.path }}"
+               data-coverage="{{ file.coverage_percent }}"
+               data-uncovered="{{ file.uncovered_lines or 0 }}">
+                <span class="file-list-icon" data-ext="{{ file.name.split('.')[-1] }}"></span>
+                <span class="file-list-path">{{ file.rel_path or file.path }}</span>
+                <span class="file-list-coverage {{ file.coverage_percent|coverage_class }}">{{ file.coverage_percent|format_percent }}</span>
+            </a>
+            {% endfor %}
         </div>
     </div>
 
@@ -323,12 +311,63 @@
     if (fileSearch) {
         fileSearch.addEventListener('input', function() {
             const query = this.value.toLowerCase();
-            document.querySelectorAll('#files-table .file-row').forEach(row => {
-                const path = row.dataset.path.toLowerCase();
-                row.style.display = path.includes(query) ? '' : 'none';
+            document.querySelectorAll('#files-list .file-list-item').forEach(item => {
+                const path = item.dataset.path.toLowerCase();
+                item.style.display = path.includes(query) ? '' : 'none';
             });
         });
     }
+
+    // File list icons
+    const iconMap = {
+        'c': ['C', 'rgba(0,68,130,0.85)', '#fff'],
+        'cpp': ['C++', 'rgba(0,68,130,0.85)', '#fff'],
+        'cc': ['C++', 'rgba(0,68,130,0.85)', '#fff'],
+        'cxx': ['C++', 'rgba(0,68,130,0.85)', '#fff'],
+        'h': ['H', 'rgba(101,154,210,0.85)', '#fff'],
+        'hpp': ['H++', 'rgba(101,154,210,0.85)', '#fff'],
+        'hxx': ['H++', 'rgba(101,154,210,0.85)', '#fff'],
+        'inl': ['inl', 'rgba(101,154,210,0.85)', '#fff'],
+        'py': ['PY', 'rgba(55,118,171,0.85)', '#ffd43b'],
+        'js': ['JS', 'rgba(247,223,30,0.9)', '#323330'],
+        'ts': ['TS', 'rgba(49,120,198,0.85)', '#fff'],
+        'go': ['GO', 'rgba(0,173,216,0.85)', '#fff'],
+        'rs': ['RS', 'rgba(222,165,132,0.9)', '#000'],
+        'java': ['JV', 'rgba(237,139,0,0.85)', '#fff'],
+        'rb': ['RB', 'rgba(204,52,45,0.85)', '#fff'],
+        'sh': ['SH', 'rgba(78,170,37,0.85)', '#fff'],
+    };
+    document.querySelectorAll('.file-list-icon').forEach(icon => {
+        const ext = icon.dataset.ext;
+        const info = iconMap[ext] || ['📄', 'transparent', 'inherit'];
+        icon.textContent = info[0];
+        icon.style.background = info[1];
+        icon.style.color = info[2];
+    });
+
+    // File list sorting
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            const list = document.getElementById('files-list');
+            const items = Array.from(list.querySelectorAll('.file-list-item'));
+            const sortBy = this.dataset.sort;
+            
+            items.sort((a, b) => {
+                if (sortBy === 'name') {
+                    return a.dataset.path.localeCompare(b.dataset.path);
+                } else if (sortBy === 'coverage') {
+                    return parseFloat(a.dataset.coverage) - parseFloat(b.dataset.coverage);
+                } else { // uncovered
+                    return parseFloat(b.dataset.uncovered) - parseFloat(a.dataset.uncovered);
+                }
+            });
+            
+            items.forEach(item => list.appendChild(item));
+        });
+    });
 
     // Initialize from URL hash or default
     document.addEventListener('DOMContentLoaded', function() {
