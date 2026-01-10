@@ -615,6 +615,139 @@ h3 {
     color: var(--color-uncovered);
 }
 
+/* Function navigator */
+.function-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-wrap: wrap;
+}
+
+.func-search-container {
+    position: relative;
+    flex: 1;
+    min-width: 300px;
+    max-width: 700px;
+}
+
+.func-search {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.func-search:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.func-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.func-dropdown.hidden {
+    display: none;
+}
+
+.func-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.func-item:last-child {
+    border-bottom: none;
+}
+
+.func-item:hover {
+    background: var(--bg-secondary);
+}
+
+.func-item-covered {
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.func-item-covered:hover {
+    background: rgba(34, 197, 94, 0.2);
+}
+
+.func-item-uncovered {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.func-item-uncovered:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.func-item-covered .func-status-dot {
+    color: var(--color-covered);
+}
+
+.func-item-uncovered .func-status-dot {
+    color: var(--color-uncovered);
+}
+
+.func-status-dot {
+    font-size: 10px;
+}
+
+.func-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.func-item-calls {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.func-item.hidden {
+    display: none;
+}
+
+.func-stats {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.func-stat-covered {
+    color: var(--color-covered);
+    font-weight: 600;
+}
+
+.func-stat-total {
+    font-weight: 600;
+}
+
 /* View controls */
 .view-controls {
     display: flex;
@@ -694,7 +827,7 @@ h3 {
     background: transparent !important;
 }
 
-/* Syntax highlighting colors that work on colored backgrounds */
+/* Syntax highlighting colors - Dark theme (default) */
 .hljs {
     color: var(--text-primary);
     background: transparent;
@@ -747,6 +880,52 @@ h3 {
 
 .hljs-params {
     color: var(--text-primary);
+}
+
+/* Syntax highlighting colors - Light theme */
+[data-theme="light"] .hljs-keyword,
+[data-theme="light"] .hljs-selector-tag,
+[data-theme="light"] .hljs-built_in,
+[data-theme="light"] .hljs-type {
+    color: #a626a4;
+}
+
+[data-theme="light"] .hljs-string,
+[data-theme="light"] .hljs-attr,
+[data-theme="light"] .hljs-symbol,
+[data-theme="light"] .hljs-bullet {
+    color: #50a14f;
+}
+
+[data-theme="light"] .hljs-number,
+[data-theme="light"] .hljs-literal {
+    color: #986801;
+}
+
+[data-theme="light"] .hljs-comment,
+[data-theme="light"] .hljs-quote {
+    color: #a0a1a7;
+    font-style: italic;
+}
+
+[data-theme="light"] .hljs-function .hljs-title,
+[data-theme="light"] .hljs-title.function_ {
+    color: #4078f2;
+}
+
+[data-theme="light"] .hljs-class .hljs-title,
+[data-theme="light"] .hljs-title.class_ {
+    color: #c18401;
+}
+
+[data-theme="light"] .hljs-variable,
+[data-theme="light"] .hljs-template-variable {
+    color: #e45649;
+}
+
+[data-theme="light"] .hljs-meta,
+[data-theme="light"] .hljs-preprocessor {
+    color: #0184bc;
 }
 
 .line-number {

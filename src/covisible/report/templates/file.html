@@ -53,6 +53,30 @@
         {% endif %}
     </header>
 
+    <!-- Function navigator with search -->
+    {% if coverage and coverage.functions %}
+    <div class="function-nav">
+        <div class="func-search-container">
+            <input type="text" id="func-search" class="func-search" placeholder="🔍 Search functions..." autocomplete="off">
+            <div id="func-dropdown" class="func-dropdown hidden">
+                {% for func in coverage.functions|sort(attribute='demangled_name') %}
+                <div class="func-item {% if func.is_covered %}func-item-covered{% else %}func-item-uncovered{% endif %}" 
+                     data-line="{{ func.start_line }}" 
+                     data-name="{{ (func.demangled_name or func.name)|lower }}">
+                    <span class="func-status-dot">●</span>
+                    <span class="func-item-name">{{ func.demangled_name or func.name }}</span>
+                    <span class="func-item-calls">{{ func.execution_count }}×</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <span class="func-stats">
+            <span class="func-stat-covered">{{ coverage.covered_functions }}</span> / 
+            <span class="func-stat-total">{{ coverage.total_functions }}</span> covered
+        </span>
+    </div>
+    {% endif %}
+
     <div class="view-controls">
         <label class="toggle">
             <input type="checkbox" id="show-all-lines" {% if not pr_coverage %}checked{% endif %}>
@@ -109,49 +133,6 @@
         </table>
     </div>
 
-    {% if coverage and coverage.functions %}
-    <section class="functions-section">
-        <h2>Functions</h2>
-        <table class="functions-table">
-            <thead>
-                <tr>
-                    <th>Function</th>
-                    <th>Line</th>
-                    <th>Calls</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for func in coverage.functions %}
-                <tr class="{% if func.is_covered %}func-covered{% else %}func-uncovered{% endif %}">
-                    <td class="func-name">
-                        {% if func.start_line > 0 %}
-                        <a href="#line-{{ func.start_line }}" class="goto-line" data-line="{{ func.start_line }}">{{ func.demangled_name or func.name }}</a>
-                        {% else %}
-                        {{ func.demangled_name or func.name }}
-                        {% endif %}
-                    </td>
-                    <td class="func-line">
-                        {% if func.start_line > 0 %}
-                        <a href="#line-{{ func.start_line }}" class="goto-line" data-line="{{ func.start_line }}">{{ func.start_line }}</a>
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
-                    <td class="func-calls">{{ func.execution_count }}</td>
-                    <td class="func-status">
-                        {% if func.is_covered %}
-                        <span class="badge badge-success">Covered</span>
-                        {% else %}
-                        <span class="badge badge-danger">Not covered</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </section>
-    {% endif %}
 </div>
 
 <script>
@@ -161,24 +142,73 @@ document.addEventListener('DOMContentLoaded', function() {
         hljs.highlightElement(block);
     });
 
-    // Scroll to line when clicking function name or line number
-    document.querySelectorAll('.goto-line').forEach(function(link) {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const lineNum = this.getAttribute('data-line');
-            const targetRow = document.querySelector('.source-line[data-line="' + lineNum + '"]');
-            if (targetRow) {
-                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Highlight the line briefly
-                targetRow.style.outline = '3px solid #3b82f6';
-                targetRow.style.outlineOffset = '-1px';
-                setTimeout(function() {
-                    targetRow.style.outline = '';
-                    targetRow.style.outlineOffset = '';
-                }, 2500);
+    // Function search and dropdown
+    const funcSearch = document.getElementById('func-search');
+    const funcDropdown = document.getElementById('func-dropdown');
+    
+    if (funcSearch && funcDropdown) {
+        const funcItems = funcDropdown.querySelectorAll('.func-item');
+        
+        // Show dropdown on focus
+        funcSearch.addEventListener('focus', function() {
+            funcDropdown.classList.remove('hidden');
+        });
+        
+        // Filter functions on input
+        funcSearch.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            funcItems.forEach(function(item) {
+                const name = item.getAttribute('data-name');
+                if (name.includes(query)) {
+                    item.classList.remove('hidden');
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+            funcDropdown.classList.remove('hidden');
+        });
+        
+        // Click on function item
+        funcItems.forEach(function(item) {
+            item.addEventListener('click', function() {
+                const lineNum = this.getAttribute('data-line');
+                const funcName = this.querySelector('.func-item-name').textContent;
+                funcSearch.value = funcName;
+                funcDropdown.classList.add('hidden');
+                if (lineNum && lineNum !== '0') {
+                    scrollToLine(lineNum);
+                }
+            });
+        });
+        
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!funcSearch.contains(e.target) && !funcDropdown.contains(e.target)) {
+                funcDropdown.classList.add('hidden');
             }
         });
-    });
+        
+        // Keyboard navigation
+        funcSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                funcDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    function scrollToLine(lineNum) {
+        const targetRow = document.querySelector('.source-line[data-line="' + lineNum + '"]');
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Highlight the line briefly
+            targetRow.style.outline = '3px solid #3b82f6';
+            targetRow.style.outlineOffset = '-1px';
+            setTimeout(function() {
+                targetRow.style.outline = '';
+                targetRow.style.outlineOffset = '';
+            }, 2500);
+        }
+    }
 });
 </script>
 {% endblock %}
