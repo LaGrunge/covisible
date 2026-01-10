@@ -379,6 +379,9 @@ class ReportGenerator:
 
         source_lines = self._read_source_file(path)
 
+        # Demangle C++ function names
+        coverage_with_demangled = self._demangle_functions(pr_cov.coverage)
+
         context = {
             "title": f"{path.name} — {self.title}",
             "file_path": str(path),
@@ -386,7 +389,8 @@ class ReportGenerator:
             "pr_coverage": pr_cov,
             "source_lines": source_lines,
             "added_lines": pr_cov.added_lines,
-            "coverage": pr_cov.coverage,
+            "coverage": coverage_with_demangled,
+            "language": self._detect_language(path),
         }
 
         html = template.render(**context)
@@ -402,6 +406,9 @@ class ReportGenerator:
 
         source_lines = self._read_source_file(path)
 
+        # Demangle C++ function names
+        coverage_with_demangled = self._demangle_functions(file_cov)
+
         context = {
             "title": f"{path.name} — {self.title}",
             "file_path": str(path),
@@ -409,7 +416,8 @@ class ReportGenerator:
             "pr_coverage": None,
             "source_lines": source_lines,
             "added_lines": set(),
-            "coverage": file_cov,
+            "coverage": coverage_with_demangled,
+            "language": self._detect_language(path),
         }
 
         html = template.render(**context)
@@ -421,6 +429,58 @@ class ReportGenerator:
             return path.read_text().splitlines()
         except (FileNotFoundError, PermissionError):
             return []
+
+    def _detect_language(self, path: Path) -> str:
+        """Detect programming language from file extension."""
+        ext_map = {
+            ".py": "python",
+            ".cpp": "cpp",
+            ".cc": "cpp",
+            ".cxx": "cpp",
+            ".c": "c",
+            ".h": "cpp",
+            ".hpp": "cpp",
+            ".hxx": "cpp",
+            ".go": "go",
+            ".rs": "rust",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".java": "java",
+            ".rb": "ruby",
+            ".php": "php",
+            ".cs": "csharp",
+            ".swift": "swift",
+            ".kt": "kotlin",
+            ".scala": "scala",
+            ".sh": "bash",
+            ".bash": "bash",
+            ".zsh": "bash",
+        }
+        return ext_map.get(path.suffix.lower(), "plaintext")
+
+    def _demangle_functions(self, file_cov):
+        """Demangle C++ function names in coverage data."""
+        if not file_cov or not file_cov.functions:
+            return file_cov
+
+        try:
+            from covisible.utils.demangle import demangle_cpp_batch, simplify_cpp_signature
+
+            # Collect all mangled names
+            mangled_names = [f.name for f in file_cov.functions]
+
+            # Batch demangle
+            demangled = demangle_cpp_batch(mangled_names)
+
+            # Update function objects with demangled names
+            for func in file_cov.functions:
+                if func.name in demangled:
+                    raw_demangled = demangled[func.name]
+                    func.demangled_name = simplify_cpp_signature(raw_demangled, max_length=100)
+        except ImportError:
+            pass
+
+        return file_cov
 
     def generate_json(self) -> None:
         """Generate JSON report."""

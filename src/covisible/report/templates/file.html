@@ -1,5 +1,15 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<!-- Highlight.js for syntax highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/rust.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <nav class="breadcrumb">
@@ -92,7 +102,7 @@
                         <span class="hits-count">{{ exec_count }}×</span>
                         {% endif %}
                     </td>
-                    <td class="line-code"><pre>{{ line }}</pre></td>
+                    <td class="line-code"><code class="language-{{ language }}">{{ line }}</code></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -133,4 +143,13 @@
     </section>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Apply syntax highlighting to each line
+    document.querySelectorAll('.line-code code').forEach(function(block) {
+        hljs.highlightElement(block);
+    });
+});
+</script>
 {% endblock %}

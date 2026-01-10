@@ -648,8 +648,8 @@ h3 {
     width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.6;
 }
 
 .source-line {
@@ -660,24 +660,93 @@ h3 {
     border-bottom: none;
 }
 
+.source-line.line-neutral {
+    background: transparent;
+}
+
 .source-line.line-added {
-    background: var(--color-added);
+    background: rgba(59, 130, 246, 0.2);
 }
 
 .source-line.line-covered {
-    background: var(--color-covered-bg);
+    background: rgba(34, 197, 94, 0.3);
 }
 
 .source-line.line-uncovered {
-    background: var(--color-uncovered-bg);
+    background: rgba(239, 68, 68, 0.35);
 }
 
 .source-line.line-added.line-covered {
-    background: linear-gradient(90deg, var(--color-added) 4px, var(--color-covered-bg) 4px);
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.4) 4px, rgba(34, 197, 94, 0.3) 4px);
 }
 
 .source-line.line-added.line-uncovered {
-    background: linear-gradient(90deg, var(--color-added-border) 4px, var(--color-uncovered-bg) 4px);
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.4) 4px, rgba(239, 68, 68, 0.35) 4px);
+}
+
+/* Override highlight.js styles - transparent background, inherit colors */
+.line-code code {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.line-code code.hljs {
+    background: transparent !important;
+}
+
+/* Syntax highlighting colors that work on colored backgrounds */
+.hljs {
+    color: var(--text-primary);
+    background: transparent;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-type {
+    color: #c678dd;
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet {
+    color: #98c379;
+}
+
+.hljs-number,
+.hljs-literal {
+    color: #d19a66;
+}
+
+.hljs-comment,
+.hljs-quote {
+    color: #7f848e;
+    font-style: italic;
+}
+
+.hljs-function .hljs-title,
+.hljs-title.function_ {
+    color: #61afef;
+}
+
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+    color: #e5c07b;
+}
+
+.hljs-variable,
+.hljs-template-variable {
+    color: #e06c75;
+}
+
+.hljs-meta,
+.hljs-preprocessor {
+    color: #56b6c2;
+}
+
+.hljs-params {
+    color: var(--text-primary);
 }
 
 .line-number {

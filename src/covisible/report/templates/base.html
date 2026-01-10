@@ -6,6 +6,7 @@
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{% if file_path %}../{% endif %}assets/css/style.css">
     <script src="{% if file_path %}../{% endif %}assets/js/app.js" defer></script>
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
     <header class="header">
