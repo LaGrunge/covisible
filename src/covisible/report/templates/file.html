@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <nav class="breadcrumb">
+        <a href="../index.html">← Back to Summary</a>
+    </nav>
+
+    <header class="file-header">
+        <h1 class="file-title">{{ file_name }}</h1>
+        <p class="file-full-path">{{ file_path }}</p>
+
+        {% if pr_coverage %}
+        <div class="file-stats">
+            <span class="stat">
+                <strong>{{ pr_coverage.total_new_lines }}</strong> new lines
+            </span>
+            <span class="stat stat-success">
+                <strong>{{ pr_coverage.covered_new_lines }}</strong> covered
+            </span>
+            <span class="stat stat-danger">
+                <strong>{{ pr_coverage.uncovered_new_lines }}</strong> uncovered
+            </span>
+            <span class="stat">
+                <strong>{{ pr_coverage.new_lines_coverage_percent|format_percent }}</strong> new code coverage
+            </span>
+        </div>
+        {% elif coverage %}
+        <div class="file-stats">
+            <span class="stat">
+                <strong>{{ coverage.total_lines }}</strong> lines
+            </span>
+            <span class="stat stat-success">
+                <strong>{{ coverage.covered_lines }}</strong> covered
+            </span>
+            <span class="stat stat-danger">
+                <strong>{{ coverage.uncovered_lines }}</strong> uncovered
+            </span>
+            <span class="stat">
+                <strong>{{ coverage.line_coverage_percent|format_percent }}</strong> coverage
+            </span>
+        </div>
+        {% endif %}
+    </header>
+
+    <div class="view-controls">
+        <label class="toggle">
+            <input type="checkbox" id="show-all-lines" {% if not pr_coverage %}checked{% endif %}>
+            <span>Show all lines</span>
+        </label>
+        <label class="toggle">
+            <input type="checkbox" id="show-line-numbers" checked>
+            <span>Line numbers</span>
+        </label>
+    </div>
+
+    <div class="source-container">
+        <table class="source-table" id="source-table">
+            <tbody>
+                {% for line in source_lines %}
+                {% set line_num = loop.index %}
+                {% set is_added = line_num in added_lines %}
+                {% set line_cov = coverage.lines.get(line_num) if coverage else none %}
+                {% set is_covered = line_cov.is_covered if line_cov else none %}
+                {% set exec_count = line_cov.count if line_cov else none %}
+
+                <tr class="source-line
+                    {% if is_added %}line-added{% endif %}
+                    {% if is_covered == true %}line-covered{% elif is_covered == false %}line-uncovered{% else %}line-neutral{% endif %}"
+                    data-line="{{ line_num }}"
+                    data-added="{{ is_added|lower }}"
+                    data-covered="{{ is_covered|lower if is_covered is not none else 'na' }}">
+
+                    <td class="line-number">{{ line_num }}</td>
+                    <td class="line-status">
+                        {% if is_added %}
+                            {% if is_covered == true %}
+                            <span class="status-icon status-covered" title="Covered">●</span>
+                            {% elif is_covered == false %}
+                            <span class="status-icon status-uncovered" title="Not covered">●</span>
+                            {% else %}
+                            <span class="status-icon status-neutral" title="Not executable">○</span>
+                            {% endif %}
+                        {% elif is_covered == true %}
+                        <span class="status-icon status-covered-dim" title="Covered">●</span>
+                        {% elif is_covered == false %}
+                        <span class="status-icon status-uncovered-dim" title="Not covered">●</span>
+                        {% endif %}
+                    </td>
+                    <td class="line-hits">
+                        {% if exec_count is not none %}
+                        <span class="hits-count">{{ exec_count }}×</span>
+                        {% endif %}
+                    </td>
+                    <td class="line-code"><pre>{{ line }}</pre></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if coverage and coverage.functions %}
+    <section class="functions-section">
+        <h2>Functions</h2>
+        <table class="functions-table">
+            <thead>
+                <tr>
+                    <th>Function</th>
+                    <th>Line</th>
+                    <th>Calls</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for func in coverage.functions %}
+                <tr class="{% if func.is_covered %}func-covered{% else %}func-uncovered{% endif %}">
+                    <td class="func-name">{{ func.demangled_name or func.name }}</td>
+                    <td class="func-line">
+                        <a href="#" data-goto-line="{{ func.start_line }}">{{ func.start_line }}</a>
+                    </td>
+                    <td class="func-calls">{{ func.execution_count }}</td>
+                    <td class="func-status">
+                        {% if func.is_covered %}
+                        <span class="badge badge-success">Covered</span>
+                        {% else %}
+                        <span class="badge badge-danger">Not covered</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

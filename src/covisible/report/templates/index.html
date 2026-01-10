@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">{{ title }}</h1>
+
+    {% if has_pr_analysis %}
+    <!-- PR-first summary -->
+    <section class="summary-section pr-summary">
+        <div class="summary-header">
+            <h2>This PR</h2>
+            {% if summary.coverage_delta >= 0 %}
+            <span class="badge badge-success">↑ {{ summary.coverage_delta|format_delta }}</span>
+            {% else %}
+            <span class="badge badge-danger">↓ {{ summary.coverage_delta|format_delta }}</span>
+            {% endif %}
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.total_new_lines }}</div>
+                <div class="stat-label">New/Modified Lines</div>
+            </div>
+            <div class="stat-card stat-success">
+                <div class="stat-value">{{ summary.covered_new_lines }}</div>
+                <div class="stat-label">Covered</div>
+            </div>
+            <div class="stat-card stat-danger">
+                <div class="stat-value">{{ summary.uncovered_new_lines }}</div>
+                <div class="stat-label">Uncovered</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ summary.new_lines_coverage_percent|format_percent }}</div>
+                <div class="stat-label">New Code Coverage</div>
+            </div>
+        </div>
+
+        {% if summary.uncovered_new_lines > 0 %}
+        <div class="alert alert-warning">
+            <strong>{{ summary.uncovered_new_lines }} new lines</strong> are not covered by tests
+            in <strong>{{ summary.files_with_uncovered_new_lines }} files</strong>
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- Coverage charts -->
+    <section class="charts-section">
+        <div class="chart-container">
+            <h3>New Code Coverage</h3>
+            <div class="pie-chart" data-covered="{{ summary.covered_new_lines }}" data-total="{{ summary.total_new_lines }}">
+                <svg viewBox="0 0 100 100" class="pie">
+                    <circle class="pie-bg" cx="50" cy="50" r="40"></circle>
+                    <circle class="pie-fg" cx="50" cy="50" r="40"
+                            stroke-dasharray="{{ (summary.new_lines_coverage_percent / 100) * 251.2 }} 251.2"
+                            transform="rotate(-90 50 50)"></circle>
+                    <text x="50" y="50" class="pie-text">{{ summary.new_lines_coverage_percent|format_percent }}</text>
+                </svg>
+            </div>
+        </div>
+        <div class="chart-container">
+            <h3>Total Coverage</h3>
+            <div class="pie-chart" data-covered="{{ coverage.covered_lines }}" data-total="{{ coverage.total_lines }}">
+                <svg viewBox="0 0 100 100" class="pie">
+                    <circle class="pie-bg" cx="50" cy="50" r="40"></circle>
+                    <circle class="pie-fg" cx="50" cy="50" r="40"
+                            stroke-dasharray="{{ (coverage.line_coverage_percent / 100) * 251.2 }} 251.2"
+                            transform="rotate(-90 50 50)"></circle>
+                    <text x="50" y="50" class="pie-text">{{ coverage.line_coverage_percent|format_percent }}</text>
+                </svg>
+            </div>
+        </div>
+    </section>
+
+    {% if uncovered_critical %}
+    <!-- Critical uncovered lines -->
+    <section class="critical-section">
+        <h2>Uncovered in Critical Paths</h2>
+        <div class="critical-list">
+            {% for item in uncovered_critical %}
+            <div class="critical-item">
+                <span class="critical-file">{{ item.file }}</span>
+                <span class="critical-line">:{{ item.line }}</span>
+                {% if item.function %}
+                <span class="critical-func">in {{ item.function }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% else %}
+    <!-- Standard summary (no PR context) -->
+    <section class="summary-section">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ coverage.line_coverage_percent|format_percent }}</div>
+                <div class="stat-label">Line Coverage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ coverage.covered_lines }} / {{ coverage.total_lines }}</div>
+                <div class="stat-label">Lines Covered</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ coverage.function_coverage_percent|format_percent }}</div>
+                <div class="stat-label">Function Coverage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ coverage.total_files }}</div>
+                <div class="stat-label">Files</div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- File search -->
+    <section class="search-section">
+        <input type="text" id="file-search" class="search-input" placeholder="Search files...">
+    </section>
+
+    <!-- Files list -->
+    <section class="files-section">
+        <h2>{% if has_pr_analysis %}Changed Files{% else %}All Files{% endif %}</h2>
+        <div class="files-table-container">
+            <table class="files-table" id="files-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="name">File</th>
+                        {% if has_pr_analysis %}
+                        <th class="sortable" data-sort="new">New Lines</th>
+                        <th class="sortable" data-sort="uncovered">Uncovered</th>
+                        <th class="sortable" data-sort="new-coverage">New Coverage</th>
+                        {% endif %}
+                        <th class="sortable" data-sort="coverage">Total Coverage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in files %}
+                    <tr class="file-row" data-path="{{ file.path }}">
+                        <td class="file-name">
+                            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html">
+                                {% if file.is_new %}<span class="badge badge-new">NEW</span>{% endif %}
+                                {{ file.name }}
+                            </a>
+                            <span class="file-path">{{ file.path }}</span>
+                        </td>
+                        {% if has_pr_analysis %}
+                        <td class="text-center">{{ file.total_new_lines }}</td>
+                        <td class="text-center {% if file.uncovered_new_lines > 0 %}text-danger{% endif %}">
+                            {{ file.uncovered_new_lines }}
+                        </td>
+                        <td class="text-center">
+                            <span class="{{ file.new_coverage_percent|coverage_class }}">
+                                {{ file.new_coverage_percent|format_percent }}
+                            </span>
+                        </td>
+                        {% endif %}
+                        <td>
+                            <div class="coverage-bar-container">
+                                <div class="coverage-bar" style="width: {{ file.coverage_percent }}%"></div>
+                                <span class="coverage-text {{ file.coverage_percent|coverage_class }}">
+                                    {{ file.coverage_percent|format_percent }}
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
