@@ -1386,6 +1386,118 @@ h3 {
     white-space: nowrap;
 }
 
+/* File type icons */
+.file-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 20px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+/* C/C++ implementation - blue */
+.icon-c, .icon-cpp {
+    background: rgba(0, 68, 130, 0.85);
+    color: #fff;
+}
+
+/* C/C++ headers - lighter blue */
+.icon-h, .icon-hpp {
+    background: rgba(101, 154, 210, 0.85);
+    color: #fff;
+}
+
+/* Python - yellow/blue */
+.icon-py {
+    background: rgba(55, 118, 171, 0.85);
+    color: #ffd43b;
+}
+
+/* JavaScript - yellow */
+.icon-js {
+    background: rgba(247, 223, 30, 0.9);
+    color: #323330;
+}
+
+/* TypeScript - blue */
+.icon-ts {
+    background: rgba(49, 120, 198, 0.85);
+    color: #fff;
+}
+
+/* Go - cyan */
+.icon-go {
+    background: rgba(0, 173, 216, 0.85);
+    color: #fff;
+}
+
+/* Rust - orange */
+.icon-rs {
+    background: rgba(222, 165, 132, 0.9);
+    color: #000;
+}
+
+/* Java - red/blue */
+.icon-java {
+    background: rgba(237, 139, 0, 0.85);
+    color: #fff;
+}
+
+/* Kotlin - purple */
+.icon-kt {
+    background: rgba(127, 82, 255, 0.85);
+    color: #fff;
+}
+
+/* Ruby - red */
+.icon-rb {
+    background: rgba(204, 52, 45, 0.85);
+    color: #fff;
+}
+
+/* PHP - purple */
+.icon-php {
+    background: rgba(119, 123, 180, 0.85);
+    color: #fff;
+}
+
+/* Swift - orange */
+.icon-swift {
+    background: rgba(240, 81, 56, 0.85);
+    color: #fff;
+}
+
+/* C# - purple */
+.icon-cs {
+    background: rgba(81, 43, 212, 0.85);
+    color: #fff;
+}
+
+/* Shell - green */
+.icon-sh {
+    background: rgba(78, 170, 37, 0.85);
+    color: #fff;
+}
+
+/* SQL - blue */
+.icon-sql {
+    background: rgba(51, 103, 145, 0.85);
+    color: #fff;
+}
+
+/* Default */
+.icon-default {
+    background: transparent;
+    min-width: auto;
+}
+
 .dir-name a:hover {
     text-decoration: underline;
 }

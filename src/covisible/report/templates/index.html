@@ -123,6 +123,44 @@
         return val.toFixed(1) + '%';
     }
 
+    function getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const icons = {
+            // C/C++ implementation
+            'c': '<span class="file-icon icon-c">C</span>',
+            'cpp': '<span class="file-icon icon-cpp">C++</span>',
+            'cc': '<span class="file-icon icon-cpp">C++</span>',
+            'cxx': '<span class="file-icon icon-cpp">C++</span>',
+            // C/C++ headers
+            'h': '<span class="file-icon icon-h">H</span>',
+            'hpp': '<span class="file-icon icon-hpp">H++</span>',
+            'hxx': '<span class="file-icon icon-hpp">H++</span>',
+            'inl': '<span class="file-icon icon-hpp">inl</span>',
+            // Python
+            'py': '<span class="file-icon icon-py">PY</span>',
+            // JavaScript/TypeScript
+            'js': '<span class="file-icon icon-js">JS</span>',
+            'ts': '<span class="file-icon icon-ts">TS</span>',
+            'jsx': '<span class="file-icon icon-js">JSX</span>',
+            'tsx': '<span class="file-icon icon-ts">TSX</span>',
+            // Go
+            'go': '<span class="file-icon icon-go">GO</span>',
+            // Rust
+            'rs': '<span class="file-icon icon-rs">RS</span>',
+            // Java/Kotlin
+            'java': '<span class="file-icon icon-java">JV</span>',
+            'kt': '<span class="file-icon icon-kt">KT</span>',
+            // Other
+            'rb': '<span class="file-icon icon-rb">RB</span>',
+            'php': '<span class="file-icon icon-php">PHP</span>',
+            'swift': '<span class="file-icon icon-swift">SW</span>',
+            'cs': '<span class="file-icon icon-cs">C#</span>',
+            'sh': '<span class="file-icon icon-sh">SH</span>',
+            'sql': '<span class="file-icon icon-sql">SQL</span>',
+        };
+        return icons[ext] || '<span class="file-icon icon-default">📄</span>';
+    }
+
     function navigateTo(path, pushState = true) {
         currentPath = path;
         updateStats(path);
@@ -255,7 +293,7 @@
             const safePath = item.full_path ? item.full_path.replace(/\//g, '_').replace(/\\/g, '_') : item.name;
             
             html += '<tr class="directory-row file-row">';
-            html += '<td class="dir-name"><a href="files/' + safePath + '.html">📄 ' + item.name + '</a></td>';
+            html += '<td class="dir-name"><a href="files/' + safePath + '.html">' + getFileIcon(item.name) + ' ' + item.name + '</a></td>';
             html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
             html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></div></td>';
             html += '<td class="text-center">' + (item.total_lines || 0) + '</td>';
