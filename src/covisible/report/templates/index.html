@@ -2,23 +2,23 @@
 
 {% block content %}
 <div class="container">
-    <!-- Summary stats with color coding -->
-    <section class="summary-header-section">
+    <!-- Summary stats with color coding (dynamic) -->
+    <section class="summary-header-section" id="stats-section">
         <div class="stats-row">
-            <div class="stat-item {{ coverage.line_coverage_percent|coverage_class }}">
-                <div class="stat-value">{{ coverage.line_coverage_percent|format_percent }}</div>
+            <div class="stat-item" id="stat-line-cov">
+                <div class="stat-value" id="stat-line-pct">{{ coverage.line_coverage_percent|format_percent }}</div>
                 <div class="stat-label">Line Coverage</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value">{{ coverage.covered_lines }} / {{ coverage.total_lines }}</div>
+                <div class="stat-value" id="stat-lines">{{ coverage.covered_lines }} / {{ coverage.total_lines }}</div>
                 <div class="stat-label">Lines</div>
             </div>
-            <div class="stat-item {{ coverage.function_coverage_percent|coverage_class }}">
-                <div class="stat-value">{{ coverage.function_coverage_percent|format_percent }}</div>
+            <div class="stat-item" id="stat-func-cov">
+                <div class="stat-value" id="stat-func-pct">{{ coverage.function_coverage_percent|format_percent }}</div>
                 <div class="stat-label">Function Coverage</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value">{{ coverage.total_files }}</div>
+                <div class="stat-value" id="stat-files">{{ coverage.total_files }}</div>
                 <div class="stat-label">Files</div>
             </div>
         </div>
@@ -102,6 +102,16 @@
     <!-- Embedded data for JS navigation -->
     <script>
     const coverageData = {{ full_tree_data | tojson }};
+    const rootStats = {
+        line_coverage_percent: {{ coverage.line_coverage_percent }},
+        covered_lines: {{ coverage.covered_lines }},
+        total_lines: {{ coverage.total_lines }},
+        function_coverage_percent: {{ coverage.function_coverage_percent }},
+        covered_functions: {{ coverage.covered_functions }},
+        total_functions: {{ coverage.total_functions }},
+        total_files: {{ coverage.total_files }}
+    };
+    let currentPath = '';
 
     function getCoverageClass(pct) {
         if (pct >= 80) return 'coverage-high';
@@ -114,17 +124,41 @@
     }
 
     function navigateTo(path) {
+        currentPath = path;
+        updateStats(path);
         updateTable(path);
+    }
+
+    function updateStats(path) {
+        let stats = rootStats;
+        if (path && coverageData[path]) {
+            stats = coverageData[path].stats;
+        }
+        
+        const linePct = stats.line_coverage_percent || 0;
+        const funcPct = stats.function_coverage_percent || 0;
+        
+        document.getElementById('stat-line-pct').textContent = formatPercent(linePct);
+        document.getElementById('stat-lines').textContent = (stats.covered_lines || 0) + ' / ' + (stats.total_lines || 0);
+        document.getElementById('stat-func-pct').textContent = formatPercent(funcPct);
+        document.getElementById('stat-files').textContent = stats.file_count || stats.total_files || '-';
+        
+        // Update color classes
+        const lineEl = document.getElementById('stat-line-cov');
+        const funcEl = document.getElementById('stat-func-cov');
+        lineEl.className = 'stat-item ' + getCoverageClass(linePct);
+        funcEl.className = 'stat-item ' + getCoverageClass(funcPct);
     }
 
     function updateTable(path) {
         const tbody = document.getElementById('browser-tbody');
         const thead = document.getElementById('browser-thead');
         
-        let items = [];
+        let dirs = [];
+        let files = [];
         
         if (!path) {
-            items = Object.keys(coverageData)
+            dirs = Object.keys(coverageData)
                 .filter(k => !k.includes('/'))
                 .map(k => ({ ...coverageData[k], path: k, isDir: true }));
         } else if (coverageData[path]) {
@@ -133,21 +167,25 @@
                 node.subdirs.forEach(sub => {
                     const subPath = path + '/' + sub;
                     if (coverageData[subPath]) {
-                        items.push({ ...coverageData[subPath], path: subPath, name: sub, isDir: true });
+                        dirs.push({ ...coverageData[subPath], path: subPath, name: sub, isDir: true });
                     }
                 });
             }
             if (node.files) {
                 node.files.forEach(f => {
-                    items.push({ ...f, isDir: false });
+                    files.push({ ...f, isDir: false });
                 });
             }
         }
 
-        const hasFiles = items.some(i => !i.isDir);
-        const hasDirs = items.some(i => i.isDir);
+        // Sort: dirs by uncovered, files by uncovered
+        dirs.sort((a, b) => (b.stats?.uncovered_lines || 0) - (a.stats?.uncovered_lines || 0));
+        files.sort((a, b) => (b.uncovered_lines || 0) - (a.uncovered_lines || 0));
+
+        const hasFiles = files.length > 0;
+        const hasDirs = dirs.length > 0;
         
-        let headerHtml = '<tr><th>' + (hasDirs && !hasFiles ? 'Directory' : hasFiles && !hasDirs ? 'Filename' : 'Name') + '</th>';
+        let headerHtml = '<tr><th>Name</th>';
         headerHtml += '<th colspan="3" class="text-center">Line Coverage</th>';
         headerHtml += '<th colspan="3" class="text-center">Function Coverage</th></tr>';
         headerHtml += '<tr class="subheader"><th></th>';
@@ -156,22 +194,26 @@
         thead.innerHTML = headerHtml;
 
         let html = '';
-        items.sort((a, b) => (b.stats?.uncovered_lines || b.uncovered_lines || 0) - (a.stats?.uncovered_lines || a.uncovered_lines || 0));
         
-        items.forEach(item => {
-            const stats = item.stats || item;
+        // Parent directory link (..)
+        if (path) {
+            const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+            html += '<tr class="directory-row parent-row">';
+            html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + parentPath + '\'); return false;">📂 ..</a></td>';
+            html += '<td colspan="6" class="text-muted">Parent directory</td>';
+            html += '</tr>';
+        }
+        
+        // Directories first
+        dirs.forEach(item => {
+            const stats = item.stats || {};
             const linePct = stats.line_coverage_percent || 0;
             const funcPct = stats.function_coverage_percent || 0;
             const lineClass = getCoverageClass(linePct);
             const funcClass = getCoverageClass(funcPct);
             
             html += '<tr class="directory-row">';
-            if (item.isDir) {
-                html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + item.path + '\'); return false;">📁 ' + item.name + '</a></td>';
-            } else {
-                const safePath = item.full_path ? item.full_path.replace(/\//g, '_').replace(/\\/g, '_') : item.name;
-                html += '<td class="dir-name"><a href="files/' + safePath + '.html">📄 ' + item.name + '</a></td>';
-            }
+            html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + item.path + '\'); return false;">📁 ' + item.name + '</a></td>';
             html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
             html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></td>';
             html += '<td class="text-center">' + (stats.total_lines || 0) + '</td>';
@@ -180,6 +222,27 @@
             html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></td>';
             html += '<td class="text-center">' + (stats.total_functions || 0) + '</td>';
             html += '<td class="text-center">' + (stats.covered_functions || 0) + '</td>';
+            html += '</tr>';
+        });
+        
+        // Then files
+        files.forEach(item => {
+            const linePct = item.line_coverage_percent || 0;
+            const funcPct = item.function_coverage_percent || 0;
+            const lineClass = getCoverageClass(linePct);
+            const funcClass = getCoverageClass(funcPct);
+            const safePath = item.full_path ? item.full_path.replace(/\//g, '_').replace(/\\/g, '_') : item.name;
+            
+            html += '<tr class="directory-row file-row">';
+            html += '<td class="dir-name"><a href="files/' + safePath + '.html">📄 ' + item.name + '</a></td>';
+            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
+            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></td>';
+            html += '<td class="text-center">' + (item.total_lines || 0) + '</td>';
+            html += '<td class="text-center">' + (item.covered_lines || 0) + '</td>';
+            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
+            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></td>';
+            html += '<td class="text-center">' + (item.total_functions || 0) + '</td>';
+            html += '<td class="text-center">' + (item.covered_functions || 0) + '</td>';
             html += '</tr>';
         });
         
