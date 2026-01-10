@@ -83,6 +83,11 @@ def main() -> None:
     default="Coverage Report",
     help="Report title",
 )
+@click.option(
+    "--blame/--no-blame",
+    default=False,
+    help="Include git blame analysis for uncovered code",
+)
 def report(
     current: Path,
     baseline: Path | None,
@@ -92,6 +97,7 @@ def report(
     output_format: str,
     repo: Path | None,
     title: str,
+    blame: bool,
 ) -> None:
     """Generate coverage report."""
     console.print("[bold blue]Covisible[/] — Generating coverage report...\n")
@@ -130,6 +136,8 @@ def report(
             analyzer=analyzer,
             output_dir=output,
             title=title,
+            base_path=repo,
+            enable_blame=blame,
         )
     else:
         generator = ReportGenerator(
@@ -137,6 +145,8 @@ def report(
             baseline=baseline_cov,
             output_dir=output,
             title=title,
+            base_path=repo,
+            enable_blame=blame,
         )
 
     if output_format in ("html", "both"):

@@ -10,7 +10,10 @@ from typing import Any
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from covisible.analysis.blame import get_uncovered_blame_summary
+from covisible.analysis.grouping import group_coverage_by_directory
 from covisible.analysis.pr_coverage import PRCoverageAnalyzer
+from covisible.analysis.treemap import build_treemap_data
 from covisible.core.models import CoverageData
 
 
@@ -24,12 +27,16 @@ class ReportGenerator:
         analyzer: PRCoverageAnalyzer | None = None,
         coverage: CoverageData | None = None,
         baseline: CoverageData | None = None,
+        base_path: Path | str | None = None,
+        enable_blame: bool = False,
     ) -> None:
         self.output_dir = output_dir
         self.title = title
         self.analyzer = analyzer
         self.coverage = coverage or (analyzer.current if analyzer else CoverageData())
         self.baseline = baseline or (analyzer.baseline if analyzer else None)
+        self.base_path = Path(base_path) if base_path else None
+        self.enable_blame = enable_blame
 
         self.env = Environment(
             loader=PackageLoader("covisible", "report/templates"),
@@ -67,6 +74,9 @@ class ReportGenerator:
         self._copy_assets()
 
         self._generate_index()
+
+        # Generate directory tree pages
+        self._generate_directory_pages()
 
         if self.analyzer:
             for path, pr_cov in self.analyzer.files.items():
@@ -151,7 +161,213 @@ class ReportGenerator:
                 )
             ]
 
+        # Add treemap data
+        context["treemap_data"] = build_treemap_data(self.coverage, self.base_path)
+
+        # Add blame data if enabled
+        if self.enable_blame:
+            uncovered_by_file = {
+                path: file_cov.get_uncovered_line_numbers()
+                for path, file_cov in self.coverage.files.items()
+                if file_cov.uncovered_lines > 0
+            }
+            context["blame_authors"] = get_uncovered_blame_summary(
+                uncovered_by_file, self.base_path, limit=10
+            )
+        else:
+            context["blame_authors"] = []
+
+        # Add full tree data for SPA navigation
+        context["full_tree_data"] = self._build_full_tree_for_spa()
+
         return context
+
+    def _build_full_tree_for_spa(self) -> dict[str, Any]:
+        """Build complete tree structure for SPA navigation."""
+        from collections import defaultdict
+
+        # Find common prefix
+        paths = list(self.coverage.files.keys())
+        if not paths:
+            return {}
+
+        first_parts = paths[0].parts
+        common_parts: list[str] = []
+        for i, part in enumerate(first_parts[:-1]):
+            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                common_parts.append(part)
+            else:
+                break
+        base_path = Path(*common_parts) if common_parts else None
+
+        # Build tree structure
+        tree: dict[str, dict[str, Any]] = {}
+
+        for file_path, file_cov in self.coverage.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+
+            # Create/update all parent directories
+            for i in range(len(parts)):
+                if i == len(parts) - 1:
+                    # File - add to parent's files list
+                    parent_path = "/".join(parts[:-1]) if len(parts) > 1 else ""
+                    if parent_path not in tree:
+                        tree[parent_path] = {
+                            "name": parts[-2] if len(parts) > 1 else "root",
+                            "files": [],
+                            "subdirs": [],
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+                    tree[parent_path]["files"].append({
+                        "name": parts[-1],
+                        "full_path": str(file_path),
+                        "total_lines": file_cov.total_lines,
+                        "covered_lines": file_cov.covered_lines,
+                        "uncovered_lines": file_cov.uncovered_lines,
+                        "line_coverage_percent": file_cov.line_coverage_percent,
+                        "total_functions": file_cov.total_functions,
+                        "covered_functions": file_cov.covered_functions,
+                        "function_coverage_percent": file_cov.function_coverage_percent,
+                    })
+                else:
+                    # Directory
+                    dir_path = "/".join(parts[:i+1])
+                    parent_path = "/".join(parts[:i]) if i > 0 else ""
+
+                    if dir_path not in tree:
+                        tree[dir_path] = {
+                            "name": parts[i],
+                            "files": [],
+                            "subdirs": [],
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+
+                    # Add to parent's subdirs
+                    if parent_path not in tree:
+                        tree[parent_path] = {
+                            "name": parts[i-1] if i > 0 else "root",
+                            "files": [],
+                            "subdirs": [],
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+                    if parts[i] not in tree[parent_path]["subdirs"]:
+                        tree[parent_path]["subdirs"].append(parts[i])
+
+        # Calculate stats for each directory
+        for file_path, file_cov in self.coverage.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+            for i in range(len(parts)):
+                dir_path = "/".join(parts[:i]) if i > 0 else ""
+                if dir_path in tree:
+                    tree[dir_path]["stats"]["total_lines"] += file_cov.total_lines
+                    tree[dir_path]["stats"]["covered_lines"] += file_cov.covered_lines
+                    tree[dir_path]["stats"]["total_functions"] += file_cov.total_functions
+                    tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
+
+        # Calculate percentages
+        for path, node in tree.items():
+            stats = node["stats"]
+            if stats["total_lines"] > 0:
+                stats["line_coverage_percent"] = (stats["covered_lines"] / stats["total_lines"]) * 100
+                stats["uncovered_lines"] = stats["total_lines"] - stats["covered_lines"]
+            else:
+                stats["line_coverage_percent"] = 100.0
+                stats["uncovered_lines"] = 0
+            if stats["total_functions"] > 0:
+                stats["function_coverage_percent"] = (stats["covered_functions"] / stats["total_functions"]) * 100
+            else:
+                stats["function_coverage_percent"] = 100.0
+            stats["file_count"] = len(node["files"])
+
+        return tree
+
+    def _build_directory_tree_for_template(self) -> list[dict[str, Any]]:
+        """Build directory tree data for lcov-style template."""
+        from collections import defaultdict
+
+        # Find common prefix
+        paths = list(self.coverage.files.keys())
+        if not paths:
+            return []
+
+        first_parts = paths[0].parts
+        common_parts: list[str] = []
+        for i, part in enumerate(first_parts[:-1]):
+            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                common_parts.append(part)
+            else:
+                break
+        base_path = Path(*common_parts) if common_parts else None
+
+        # Group files by top-level directory
+        dir_stats: dict[str, dict[str, int]] = defaultdict(
+            lambda: {
+                "total_lines": 0,
+                "covered_lines": 0,
+                "total_functions": 0,
+                "covered_functions": 0,
+            }
+        )
+
+        for file_path, file_cov in self.coverage.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+            if len(parts) > 1:
+                top_dir = parts[0]
+            else:
+                top_dir = "."
+
+            dir_stats[top_dir]["total_lines"] += file_cov.total_lines
+            dir_stats[top_dir]["covered_lines"] += file_cov.covered_lines
+            dir_stats[top_dir]["total_functions"] += file_cov.total_functions
+            dir_stats[top_dir]["covered_functions"] += file_cov.covered_functions
+
+        # Convert to list
+        result = []
+        for name, stats in sorted(dir_stats.items()):
+            total_lines = stats["total_lines"]
+            covered_lines = stats["covered_lines"]
+            total_funcs = stats["total_functions"]
+            covered_funcs = stats["covered_functions"]
+
+            result.append({
+                "name": name,
+                "path": name,
+                "total_lines": total_lines,
+                "covered_lines": covered_lines,
+                "uncovered_lines": total_lines - covered_lines,
+                "line_coverage_percent": (covered_lines / total_lines * 100) if total_lines > 0 else 100.0,
+                "total_functions": total_funcs,
+                "covered_functions": covered_funcs,
+                "function_coverage_percent": (covered_funcs / total_funcs * 100) if total_funcs > 0 else 100.0,
+            })
+
+        # Sort by uncovered lines descending
+        result.sort(key=lambda x: x["uncovered_lines"], reverse=True)
+        return result
 
     def _generate_file_page(self, path: Path, pr_cov) -> None:
         """Generate individual file page with PR diff view."""
@@ -271,4 +487,215 @@ class ReportGenerator:
                 "line_coverage_percent": self.baseline.line_coverage_percent,
             }
 
+        # Add module groups for CI
+        report["modules"] = group_coverage_by_directory(
+            self.coverage, self.base_path, depth=1
+        )
+
+        # Add CI-specific fields
+        report["ci"] = {
+            "passed": self._check_ci_thresholds(),
+            "thresholds": {
+                "line_coverage_min": 0,
+                "new_code_coverage_min": 0,
+            },
+        }
+
         return report
+
+    def _check_ci_thresholds(
+        self,
+        line_coverage_min: float = 0,
+        new_code_coverage_min: float = 0,
+    ) -> bool:
+        """Check if coverage meets CI thresholds."""
+        if self.coverage.line_coverage_percent < line_coverage_min:
+            return False
+        if self.analyzer:
+            if self.analyzer.summary.new_lines_coverage_percent < new_code_coverage_min:
+                return False
+        return True
+
+    def _generate_directory_pages(self) -> None:
+        """Generate directory index pages for tree navigation."""
+        template = self.env.get_template("directory.html")
+
+        # Build directory tree structure
+        tree = self._build_directory_tree()
+
+        # Generate page for each directory
+        for dir_path, dir_info in tree.items():
+            self._generate_single_directory_page(template, dir_path, dir_info, tree)
+
+    def _build_directory_tree(self) -> dict[str, dict[str, Any]]:
+        """Build a tree structure of directories with their stats."""
+        tree: dict[str, dict[str, Any]] = {}
+
+        # Find common prefix
+        paths = list(self.coverage.files.keys())
+        if not paths:
+            return tree
+
+        first_parts = paths[0].parts
+        common_parts: list[str] = []
+        for i, part in enumerate(first_parts[:-1]):
+            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                common_parts.append(part)
+            else:
+                break
+        base_path = Path(*common_parts) if common_parts else None
+
+        # Process each file
+        for file_path, file_cov in self.coverage.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            # Add all parent directories
+            parts = rel_path.parts
+            for i in range(len(parts)):
+                if i == len(parts) - 1:
+                    # This is the file itself
+                    parent_dir = str(Path(*parts[:-1])) if len(parts) > 1 else ""
+                    if parent_dir not in tree:
+                        tree[parent_dir] = {
+                            "name": parts[-2] if len(parts) > 1 else "root",
+                            "files": [],
+                            "subdirs": set(),
+                            "total_lines": 0,
+                            "covered_lines": 0,
+                        }
+                    tree[parent_dir]["files"].append({
+                        "name": parts[-1],
+                        "path": str(rel_path),
+                        "safe_path": str(file_path).replace("/", "_").replace("\\", "_"),
+                        "total_lines": file_cov.total_lines,
+                        "covered_lines": file_cov.covered_lines,
+                        "uncovered_lines": file_cov.uncovered_lines,
+                        "coverage_percent": file_cov.line_coverage_percent,
+                    })
+                else:
+                    # This is a directory
+                    dir_path_str = str(Path(*parts[:i+1]))
+                    parent_dir = str(Path(*parts[:i])) if i > 0 else ""
+
+                    if dir_path_str not in tree:
+                        tree[dir_path_str] = {
+                            "name": parts[i],
+                            "files": [],
+                            "subdirs": set(),
+                            "total_lines": 0,
+                            "covered_lines": 0,
+                        }
+
+                    # Add as subdir to parent
+                    if parent_dir not in tree:
+                        tree[parent_dir] = {
+                            "name": parts[i-1] if i > 0 else "root",
+                            "files": [],
+                            "subdirs": set(),
+                            "total_lines": 0,
+                            "covered_lines": 0,
+                        }
+                    tree[parent_dir]["subdirs"].add(parts[i])
+
+        # Calculate stats for each directory (bottom-up)
+        for file_path, file_cov in self.coverage.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+            for i in range(len(parts)):
+                dir_path_str = str(Path(*parts[:i])) if i > 0 else ""
+                if dir_path_str in tree:
+                    tree[dir_path_str]["total_lines"] += file_cov.total_lines
+                    tree[dir_path_str]["covered_lines"] += file_cov.covered_lines
+
+        return tree
+
+    def _generate_single_directory_page(
+        self,
+        template,
+        dir_path: str,
+        dir_info: dict[str, Any],
+        tree: dict[str, dict[str, Any]],
+    ) -> None:
+        """Generate a single directory index page."""
+        # Calculate depth for relative paths
+        depth = len(Path(dir_path).parts) if dir_path else 0
+
+        # Build breadcrumbs
+        breadcrumbs = []
+        if dir_path:
+            parts = Path(dir_path).parts
+            for i, part in enumerate(parts):
+                breadcrumbs.append({
+                    "name": part,
+                    "path": str(Path(*parts[:i+1])),
+                })
+
+        # Get subdirectories with stats
+        subdirs = []
+        for subdir_name in sorted(dir_info["subdirs"]):
+            subdir_path = f"{dir_path}/{subdir_name}" if dir_path else subdir_name
+            if subdir_path in tree:
+                subdir_info = tree[subdir_path]
+                total = subdir_info["total_lines"]
+                covered = subdir_info["covered_lines"]
+                subdirs.append({
+                    "name": subdir_name,
+                    "path": subdir_path,
+                    "file_count": len(subdir_info["files"]) + sum(
+                        len(tree.get(f"{subdir_path}/{s}", {}).get("files", []))
+                        for s in subdir_info["subdirs"]
+                    ),
+                    "total_lines": total,
+                    "covered_lines": covered,
+                    "uncovered_lines": total - covered,
+                    "coverage_percent": (covered / total * 100) if total > 0 else 100.0,
+                })
+
+        # Sort files by uncovered lines
+        files = sorted(dir_info["files"], key=lambda f: f["uncovered_lines"], reverse=True)
+
+        # Calculate directory stats
+        total = dir_info["total_lines"]
+        covered = dir_info["covered_lines"]
+        stats = {
+            "total_lines": total,
+            "covered_lines": covered,
+            "uncovered_lines": total - covered,
+            "coverage_percent": (covered / total * 100) if total > 0 else 100.0,
+            "file_count": len(files),
+        }
+
+        context = {
+            "title": f"{dir_info['name']} — {self.title}",
+            "directory_name": dir_info["name"] or "root",
+            "directory_path": dir_path,
+            "depth": depth,
+            "breadcrumbs": breadcrumbs,
+            "subdirectories": subdirs,
+            "files": files,
+            "stats": stats,
+        }
+
+        # Create output directory and file
+        if dir_path:
+            output_dir = self.output_dir / "dirs" / dir_path
+        else:
+            output_dir = self.output_dir / "dirs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "index.html"
+
+        html = template.render(**context)
+        output_path.write_text(html)

@@ -1,0 +1,97 @@
+<!-- Treemap Component -->
+<section class="treemap-section">
+    <h2>Coverage by Directory</h2>
+    <div class="treemap-container" id="treemap-container">
+        <div class="treemap" id="treemap"></div>
+    </div>
+    <div class="treemap-legend">
+        <span class="legend-item"><span class="legend-color coverage-high"></span> ≥80%</span>
+        <span class="legend-item"><span class="legend-color coverage-medium"></span> 50-80%</span>
+        <span class="legend-item"><span class="legend-color coverage-low"></span> &lt;50%</span>
+    </div>
+</section>
+
+<script>
+(function() {
+    const treemapData = {{ treemap_data | tojson }};
+    
+    function renderTreemap(data, container) {
+        if (!data.children || data.children.length === 0) return;
+        
+        const containerEl = document.getElementById(container);
+        if (!containerEl) return;
+        
+        // Calculate total for sizing
+        const total = data.children.reduce((sum, c) => sum + c.total_lines, 0);
+        if (total === 0) return;
+        
+        // Sort by size descending
+        const sorted = [...data.children].sort((a, b) => b.total_lines - a.total_lines);
+        
+        // Render cells
+        sorted.forEach(item => {
+            const cell = document.createElement('div');
+            cell.className = 'treemap-cell';
+            
+            // Size based on total lines
+            const percent = (item.total_lines / total) * 100;
+            cell.style.flexBasis = `${Math.max(percent, 5)}%`;
+            cell.style.flexGrow = percent;
+            
+            // Color based on coverage
+            const cov = item.coverage_percent;
+            if (cov >= 80) {
+                cell.classList.add('coverage-high');
+            } else if (cov >= 50) {
+                cell.classList.add('coverage-medium');
+            } else {
+                cell.classList.add('coverage-low');
+            }
+            
+            // Content
+            cell.innerHTML = `
+                <div class="treemap-cell-name">${item.name}</div>
+                <div class="treemap-cell-stats">
+                    <span class="treemap-cell-percent">${cov.toFixed(1)}%</span>
+                    <span class="treemap-cell-lines">${item.uncovered_lines} uncovered</span>
+                </div>
+            `;
+            
+            // Tooltip
+            cell.title = `${item.path}\n${item.covered_lines}/${item.total_lines} lines covered (${cov.toFixed(1)}%)`;
+            
+            // Click to expand
+            if (item.children && item.children.length > 0) {
+                cell.classList.add('has-children');
+                cell.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    containerEl.innerHTML = '';
+                    
+                    // Add back button
+                    const backBtn = document.createElement('button');
+                    backBtn.className = 'treemap-back-btn';
+                    backBtn.textContent = '← Back';
+                    backBtn.addEventListener('click', () => {
+                        containerEl.innerHTML = '';
+                        renderTreemap(data, container);
+                    });
+                    containerEl.appendChild(backBtn);
+                    
+                    // Render children
+                    const childContainer = document.createElement('div');
+                    childContainer.className = 'treemap';
+                    childContainer.id = 'treemap-child';
+                    containerEl.appendChild(childContainer);
+                    renderTreemap(item, 'treemap-child');
+                });
+            }
+            
+            containerEl.appendChild(cell);
+        });
+    }
+    
+    if (treemapData && treemapData.children) {
+        renderTreemap(treemapData, 'treemap');
+    }
+})();
+</script>

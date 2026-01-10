@@ -2,7 +2,206 @@
 
 {% block content %}
 <div class="container">
-    <h1 class="page-title">{{ title }}</h1>
+    <!-- Breadcrumb navigation (dynamic) -->
+    <nav class="breadcrumb-nav" id="breadcrumb-nav">
+        <span class="breadcrumb-label">Current view:</span>
+        <a href="#" onclick="navigateTo(''); return false;">top level</a>
+    </nav>
+
+    <!-- Dynamic stats section -->
+    <section class="summary-section" id="current-stats">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-line-pct">{{ coverage.line_coverage_percent|format_percent }}</div>
+                <div class="stat-label">Line Coverage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-lines">{{ coverage.covered_lines }} / {{ coverage.total_lines }}</div>
+                <div class="stat-label">Lines Covered</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-func-pct">{{ coverage.function_coverage_percent|format_percent }}</div>
+                <div class="stat-label">Function Coverage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-files">{{ coverage.total_files }}</div>
+                <div class="stat-label">Files</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Directory/File Browser (dynamic) -->
+    <section class="directory-section">
+        <div class="files-table-container">
+            <table class="files-table directory-table" id="browser-table">
+                <thead id="browser-thead">
+                    <tr>
+                        <th>Directory</th>
+                        <th colspan="3" class="text-center">Line Coverage</th>
+                        <th colspan="3" class="text-center">Function Coverage</th>
+                    </tr>
+                    <tr class="subheader">
+                        <th></th>
+                        <th class="text-center">Rate</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Hit</th>
+                        <th class="text-center">Rate</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Hit</th>
+                    </tr>
+                </thead>
+                <tbody id="browser-tbody">
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Embedded data for JS navigation -->
+    <script>
+    const coverageData = {{ full_tree_data | tojson }};
+    const rootStats = {
+        line_coverage_percent: {{ coverage.line_coverage_percent }},
+        covered_lines: {{ coverage.covered_lines }},
+        total_lines: {{ coverage.total_lines }},
+        function_coverage_percent: {{ coverage.function_coverage_percent }},
+        total_files: {{ coverage.total_files }}
+    };
+
+    let currentPath = '';
+
+    function getCoverageClass(pct) {
+        if (pct >= 80) return 'coverage-high';
+        if (pct >= 50) return 'coverage-medium';
+        return 'coverage-low';
+    }
+
+    function formatPercent(val) {
+        return val.toFixed(1) + '%';
+    }
+
+    function navigateTo(path) {
+        currentPath = path;
+        updateBreadcrumb(path);
+        updateStats(path);
+        updateTable(path);
+    }
+
+    function updateBreadcrumb(path) {
+        const nav = document.getElementById('breadcrumb-nav');
+        let html = '<span class="breadcrumb-label">Current view:</span> ';
+        
+        if (!path) {
+            html += '<span class="breadcrumb-current">top level</span>';
+        } else {
+            html += '<a href="#" onclick="navigateTo(\'\'); return false;">top level</a>';
+            const parts = path.split('/');
+            let accumulated = '';
+            parts.forEach((part, i) => {
+                accumulated += (i > 0 ? '/' : '') + part;
+                html += ' <span class="breadcrumb-sep">/</span> ';
+                if (i === parts.length - 1) {
+                    html += '<span class="breadcrumb-current">' + part + '</span>';
+                } else {
+                    const p = accumulated;
+                    html += '<a href="#" onclick="navigateTo(\'' + p + '\'); return false;">' + part + '</a>';
+                }
+            });
+        }
+        nav.innerHTML = html;
+    }
+
+    function updateStats(path) {
+        let stats = rootStats;
+        if (path && coverageData[path]) {
+            stats = coverageData[path].stats;
+        }
+        document.getElementById('stat-line-pct').textContent = formatPercent(stats.line_coverage_percent);
+        document.getElementById('stat-lines').textContent = stats.covered_lines + ' / ' + stats.total_lines;
+        document.getElementById('stat-func-pct').textContent = formatPercent(stats.function_coverage_percent);
+        document.getElementById('stat-files').textContent = stats.total_files || stats.file_count || '-';
+    }
+
+    function updateTable(path) {
+        const tbody = document.getElementById('browser-tbody');
+        const thead = document.getElementById('browser-thead');
+        
+        let items = [];
+        let isFileLevel = false;
+        
+        if (!path) {
+            // Root level - show top directories
+            items = Object.keys(coverageData)
+                .filter(k => !k.includes('/'))
+                .map(k => ({ ...coverageData[k], path: k, isDir: true }));
+        } else if (coverageData[path]) {
+            const node = coverageData[path];
+            // Show subdirectories
+            if (node.subdirs) {
+                node.subdirs.forEach(sub => {
+                    const subPath = path + '/' + sub;
+                    if (coverageData[subPath]) {
+                        items.push({ ...coverageData[subPath], path: subPath, name: sub, isDir: true });
+                    }
+                });
+            }
+            // Show files
+            if (node.files) {
+                isFileLevel = node.files.length > 0;
+                node.files.forEach(f => {
+                    items.push({ ...f, isDir: false });
+                });
+            }
+        }
+
+        // Update header based on content type
+        const hasFiles = items.some(i => !i.isDir);
+        const hasDirs = items.some(i => i.isDir);
+        
+        let headerHtml = '<tr><th>' + (hasDirs && !hasFiles ? 'Directory' : hasFiles && !hasDirs ? 'Filename' : 'Name') + '</th>';
+        headerHtml += '<th colspan="3" class="text-center">Line Coverage</th>';
+        headerHtml += '<th colspan="3" class="text-center">Function Coverage</th></tr>';
+        headerHtml += '<tr class="subheader"><th></th>';
+        headerHtml += '<th class="text-center">Rate</th><th class="text-center">Total</th><th class="text-center">Hit</th>';
+        headerHtml += '<th class="text-center">Rate</th><th class="text-center">Total</th><th class="text-center">Hit</th></tr>';
+        thead.innerHTML = headerHtml;
+
+        // Render rows
+        let html = '';
+        items.sort((a, b) => (b.stats?.uncovered_lines || b.uncovered_lines || 0) - (a.stats?.uncovered_lines || a.uncovered_lines || 0));
+        
+        items.forEach(item => {
+            const stats = item.stats || item;
+            const linePct = stats.line_coverage_percent || 0;
+            const funcPct = stats.function_coverage_percent || 0;
+            const lineClass = getCoverageClass(linePct);
+            const funcClass = getCoverageClass(funcPct);
+            
+            html += '<tr class="directory-row">';
+            if (item.isDir) {
+                html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + item.path + '\'); return false;">📁 ' + item.name + '</a></td>';
+            } else {
+                const safePath = item.full_path ? item.full_path.replace(/\//g, '_').replace(/\\/g, '_') : item.name;
+                html += '<td class="dir-name"><a href="files/' + safePath + '.html">📄 ' + item.name + '</a></td>';
+            }
+            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
+            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></td>';
+            html += '<td class="text-center">' + (stats.total_lines || 0) + '</td>';
+            html += '<td class="text-center">' + (stats.covered_lines || 0) + '</td>';
+            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
+            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></td>';
+            html += '<td class="text-center">' + (stats.total_functions || 0) + '</td>';
+            html += '<td class="text-center">' + (stats.covered_functions || 0) + '</td>';
+            html += '</tr>';
+        });
+        
+        tbody.innerHTML = html;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        navigateTo('');
+    });
+    </script>
 
     {% if has_pr_analysis %}
     <!-- PR-first summary -->
@@ -109,6 +308,88 @@
                 <div class="stat-value">{{ coverage.total_files }}</div>
                 <div class="stat-label">Files</div>
             </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Directory Browser (lcov-style) -->
+    {% if directory_tree %}
+    <section class="directory-section">
+        <div class="files-table-container">
+            <table class="files-table directory-table">
+                <thead>
+                    <tr>
+                        <th>Directory</th>
+                        <th colspan="3" class="text-center">Line Coverage</th>
+                        <th colspan="3" class="text-center">Function Coverage</th>
+                    </tr>
+                    <tr class="subheader">
+                        <th></th>
+                        <th class="text-center">Rate</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Hit</th>
+                        <th class="text-center">Rate</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Hit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dir in directory_tree %}
+                    <tr class="directory-row">
+                        <td class="dir-name">
+                            <a href="dirs/{{ dir.path }}/index.html">
+                                📁 {{ dir.name }}
+                            </a>
+                        </td>
+                        <td class="coverage-cell">
+                            <div class="lcov-bar">
+                                <div class="lcov-bar-fill {{ dir.line_coverage_percent|coverage_class }}" 
+                                     style="width: {{ dir.line_coverage_percent }}%"></div>
+                            </div>
+                            <span class="{{ dir.line_coverage_percent|coverage_class }}">{{ dir.line_coverage_percent|format_percent }}</span>
+                        </td>
+                        <td class="text-center">{{ dir.total_lines }}</td>
+                        <td class="text-center">{{ dir.covered_lines }}</td>
+                        <td class="coverage-cell">
+                            <div class="lcov-bar">
+                                <div class="lcov-bar-fill {{ dir.function_coverage_percent|coverage_class }}" 
+                                     style="width: {{ dir.function_coverage_percent }}%"></div>
+                            </div>
+                            <span class="{{ dir.function_coverage_percent|coverage_class }}">{{ dir.function_coverage_percent|format_percent }}</span>
+                        </td>
+                        <td class="text-center">{{ dir.total_functions }}</td>
+                        <td class="text-center">{{ dir.covered_functions }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Blame Section -->
+    {% if blame_authors %}
+    <section class="blame-section">
+        <h2>Who Wrote Uncovered Code?</h2>
+        <div class="blame-list">
+            {% for author in blame_authors %}
+            <div class="blame-card">
+                <div class="blame-author">
+                    <span class="blame-author-name">{{ author.name }}</span>
+                    <span class="blame-author-email">{{ author.email }}</span>
+                </div>
+                <div class="blame-stats">
+                    <div class="blame-stat">
+                        <div class="blame-stat-value">{{ author.total_uncovered_lines }}</div>
+                        <div class="blame-stat-label">uncovered lines</div>
+                    </div>
+                    <div class="blame-stat">
+                        <div class="blame-stat-value">{{ author.files_count }}</div>
+                        <div class="blame-stat-label">files</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </section>
     {% endif %}
