@@ -409,9 +409,12 @@ class ReportGenerator:
         # Demangle C++ function names
         coverage_with_demangled = self._demangle_functions(file_cov)
 
+        # Compute relative path from project root
+        rel_path = self._get_relative_path(path)
+
         context = {
             "title": f"{path.name} — {self.title}",
-            "file_path": str(path),
+            "file_path": str(rel_path),
             "file_name": path.name,
             "pr_coverage": None,
             "source_lines": source_lines,
@@ -422,6 +425,33 @@ class ReportGenerator:
 
         html = template.render(**context)
         output_path.write_text(html)
+
+    def _get_relative_path(self, path: Path) -> Path:
+        """Get path relative to project root (base_path or common prefix)."""
+        if self.base_path:
+            try:
+                return path.relative_to(self.base_path)
+            except ValueError:
+                pass
+        
+        # Try to find common prefix from all files
+        paths = list(self.coverage.files.keys())
+        if paths:
+            first_parts = paths[0].parts
+            common_parts: list[str] = []
+            for i, part in enumerate(first_parts[:-1]):
+                if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                    common_parts.append(part)
+                else:
+                    break
+            if common_parts:
+                base = Path(*common_parts)
+                try:
+                    return path.relative_to(base)
+                except ValueError:
+                    pass
+        
+        return path
 
     def _read_source_file(self, path: Path) -> list[str]:
         """Read source file lines."""
