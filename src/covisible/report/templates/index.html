@@ -158,9 +158,18 @@
         let files = [];
         
         if (!path) {
-            dirs = Object.keys(coverageData)
-                .filter(k => !k.includes('/'))
-                .map(k => ({ ...coverageData[k], path: k, isDir: true }));
+            // Get subdirs from root node (empty key) or top-level dirs
+            if (coverageData[''] && coverageData[''].subdirs) {
+                coverageData[''].subdirs.forEach(sub => {
+                    if (coverageData[sub]) {
+                        dirs.push({ ...coverageData[sub], path: sub, isDir: true });
+                    }
+                });
+            } else {
+                dirs = Object.keys(coverageData)
+                    .filter(k => k && !k.includes('/'))
+                    .map(k => ({ ...coverageData[k], path: k, isDir: true }));
+            }
         } else if (coverageData[path]) {
             const node = coverageData[path];
             if (node.subdirs) {
@@ -214,12 +223,12 @@
             
             html += '<tr class="directory-row">';
             html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + item.path + '\'); return false;">📁 ' + item.name + '</a></td>';
-            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
-            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></td>';
+            html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
+            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></div></td>';
             html += '<td class="text-center">' + (stats.total_lines || 0) + '</td>';
             html += '<td class="text-center">' + (stats.covered_lines || 0) + '</td>';
-            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
-            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></td>';
+            html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
+            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></div></td>';
             html += '<td class="text-center">' + (stats.total_functions || 0) + '</td>';
             html += '<td class="text-center">' + (stats.covered_functions || 0) + '</td>';
             html += '</tr>';
@@ -235,12 +244,12 @@
             
             html += '<tr class="directory-row file-row">';
             html += '<td class="dir-name"><a href="files/' + safePath + '.html">📄 ' + item.name + '</a></td>';
-            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
-            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></td>';
+            html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
+            html += '<span class="' + lineClass + '">' + formatPercent(linePct) + '</span></div></td>';
             html += '<td class="text-center">' + (item.total_lines || 0) + '</td>';
             html += '<td class="text-center">' + (item.covered_lines || 0) + '</td>';
-            html += '<td class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
-            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></td>';
+            html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + funcClass + '" style="width:' + funcPct + '%"></div></div>';
+            html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span></div></td>';
             html += '<td class="text-center">' + (item.total_functions || 0) + '</td>';
             html += '<td class="text-center">' + (item.covered_functions || 0) + '</td>';
             html += '</tr>';

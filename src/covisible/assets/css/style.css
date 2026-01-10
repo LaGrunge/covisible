@@ -1338,6 +1338,7 @@ h3 {
 
 .directory-table {
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 .directory-table thead tr:first-child th {
@@ -1349,7 +1350,21 @@ h3 {
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--text-secondary);
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-md);
+}
+
+/* Fixed column widths for directory table */
+.directory-table th:first-child,
+.directory-table td:first-child {
+    width: 35%;
+}
+
+.directory-table .coverage-cell {
+    width: 140px;
+}
+
+.directory-table .text-center {
+    width: 70px;
 }
 
 .directory-row:hover {
@@ -1357,8 +1372,8 @@ h3 {
 }
 
 .dir-name {
-    font-weight: 600;
-    font-size: var(--font-size-lg);
+    font-weight: 500;
+    font-size: var(--font-size-base);
 }
 
 .dir-name a {
@@ -1366,6 +1381,9 @@ h3 {
     align-items: center;
     gap: var(--spacing-sm);
     color: var(--accent-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .dir-name a:hover {
@@ -1376,15 +1394,22 @@ h3 {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    min-width: 120px;
+    white-space: nowrap;
 }
 
 .lcov-bar {
-    width: 60px;
+    width: 70px;
     height: 12px;
     background: linear-gradient(to right, var(--color-uncovered) 0%, var(--color-uncovered) 100%);
     border-radius: 2px;
     overflow: hidden;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.coverage-cell span {
+    display: inline-block;
+    min-width: 50px;
 }
 
 .lcov-bar-fill {
