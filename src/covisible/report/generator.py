@@ -459,7 +459,7 @@ class ReportGenerator:
         return ext_map.get(path.suffix.lower(), "plaintext")
 
     def _demangle_functions(self, file_cov):
-        """Demangle C++ function names in coverage data."""
+        """Demangle C++ function names and fix missing start_line."""
         if not file_cov or not file_cov.functions:
             return file_cov
 
@@ -472,11 +472,21 @@ class ReportGenerator:
             # Batch demangle
             demangled = demangle_cpp_batch(mangled_names)
 
-            # Update function objects with demangled names
+            # Build map of function_name -> first line number from line coverage
+            func_to_line: dict[str, int] = {}
+            for line_num, line_cov in file_cov.lines.items():
+                if line_cov.function_name and line_cov.function_name not in func_to_line:
+                    func_to_line[line_cov.function_name] = line_num
+
+            # Update function objects with demangled names and fix start_line
             for func in file_cov.functions:
                 if func.name in demangled:
                     raw_demangled = demangled[func.name]
                     func.demangled_name = simplify_cpp_signature(raw_demangled, max_length=100)
+
+                # Fix start_line if it's 0
+                if func.start_line == 0 and func.name in func_to_line:
+                    func.start_line = func_to_line[func.name]
         except ImportError:
             pass
 

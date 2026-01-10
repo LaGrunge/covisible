@@ -102,7 +102,7 @@
                         <span class="hits-count">{{ exec_count }}×</span>
                         {% endif %}
                     </td>
-                    <td class="line-code"><code class="language-{{ language }}">{{ line }}</code></td>
+                    <td class="line-code"><pre><code class="language-{{ language }}">{{ line|e }}</code></pre></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -124,9 +124,19 @@
             <tbody>
                 {% for func in coverage.functions %}
                 <tr class="{% if func.is_covered %}func-covered{% else %}func-uncovered{% endif %}">
-                    <td class="func-name">{{ func.demangled_name or func.name }}</td>
+                    <td class="func-name">
+                        {% if func.start_line > 0 %}
+                        <a href="#line-{{ func.start_line }}" class="goto-line" data-line="{{ func.start_line }}">{{ func.demangled_name or func.name }}</a>
+                        {% else %}
+                        {{ func.demangled_name or func.name }}
+                        {% endif %}
+                    </td>
                     <td class="func-line">
-                        <a href="#" data-goto-line="{{ func.start_line }}">{{ func.start_line }}</a>
+                        {% if func.start_line > 0 %}
+                        <a href="#line-{{ func.start_line }}" class="goto-line" data-line="{{ func.start_line }}">{{ func.start_line }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
                     </td>
                     <td class="func-calls">{{ func.execution_count }}</td>
                     <td class="func-status">
@@ -149,6 +159,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Apply syntax highlighting to each line
     document.querySelectorAll('.line-code code').forEach(function(block) {
         hljs.highlightElement(block);
+    });
+
+    // Scroll to line when clicking function name or line number
+    document.querySelectorAll('.goto-line').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const lineNum = this.getAttribute('data-line');
+            const targetRow = document.querySelector('.source-line[data-line="' + lineNum + '"]');
+            if (targetRow) {
+                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Highlight the line briefly
+                targetRow.style.outline = '3px solid #3b82f6';
+                targetRow.style.outlineOffset = '-1px';
+                setTimeout(function() {
+                    targetRow.style.outline = '';
+                    targetRow.style.outlineOffset = '';
+                }, 2500);
+            }
+        });
     });
 });
 </script>

@@ -801,6 +801,13 @@ h3 {
     margin: 0;
     white-space: pre;
     tab-size: 4;
+    background: transparent;
+}
+
+.line-code pre code {
+    background: transparent !important;
+    padding: 0 !important;
+    white-space: pre;
 }
 
 /* Hide non-added lines by default in PR view */
@@ -820,7 +827,8 @@ h3 {
 .functions-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--font-size-sm);
+    font-family: var(--font-mono);
+    font-size: 15px;
 }
 
 .functions-table th,
@@ -836,12 +844,21 @@ h3 {
 }
 
 .func-name {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    max-width: 500px;
+    max-width: 600px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.func-name a,
+.func-line a {
+    color: var(--accent-color);
+    cursor: pointer;
+}
+
+.func-name a:hover,
+.func-line a:hover {
+    text-decoration: underline;
 }
 
 .func-uncovered {
