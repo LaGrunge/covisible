@@ -1479,6 +1479,23 @@ h3 {
     background: var(--bg-secondary);
 }
 
+/* Sortable headers */
+.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+}
+
+.sortable-header:hover {
+    color: var(--accent-color);
+}
+
+.sort-indicator {
+    font-size: 0.8em;
+    margin-left: 4px;
+    color: var(--accent-color);
+}
+
 .dir-name {
     font-weight: 500;
     font-size: var(--font-size-base);

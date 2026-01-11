@@ -42,18 +42,18 @@
             <table class="files-table directory-table" id="browser-table">
                 <thead id="browser-thead">
                     <tr>
-                        <th>Directory</th>
+                        <th class="sortable-header" data-sort="name">Name <span class="sort-indicator">↑</span></th>
                         <th colspan="3" class="text-center">Line Coverage</th>
                         <th colspan="3" class="text-center">Function Coverage</th>
                     </tr>
                     <tr class="subheader">
                         <th></th>
-                        <th class="text-center">Rate</th>
-                        <th class="text-center">Total</th>
-                        <th class="text-center">Hit</th>
-                        <th class="text-center">Rate</th>
-                        <th class="text-center">Total</th>
-                        <th class="text-center">Hit</th>
+                        <th class="text-center sortable-header" data-sort="line-rate">Rate</th>
+                        <th class="text-center sortable-header" data-sort="line-total">Total</th>
+                        <th class="text-center sortable-header" data-sort="line-hit">Hit</th>
+                        <th class="text-center sortable-header" data-sort="func-rate">Rate</th>
+                        <th class="text-center sortable-header" data-sort="func-total">Total</th>
+                        <th class="text-center sortable-header" data-sort="func-hit">Hit</th>
                     </tr>
                 </thead>
                 <tbody id="browser-tbody">
@@ -109,6 +109,82 @@
 
     function formatPercent(val) {
         return val.toFixed(1) + '%';
+    }
+
+    // Sorting state
+    let currentSort = 'name';
+    let sortAsc = true;
+
+    function sortItems(dirs, files) {
+        const sortFn = getSortFunction();
+        dirs.sort((a, b) => {
+            const result = sortFn(a, b, true);
+            return sortAsc ? result : -result;
+        });
+        files.sort((a, b) => {
+            const result = sortFn(a, b, false);
+            return sortAsc ? result : -result;
+        });
+    }
+
+    function getSortFunction() {
+        switch (currentSort) {
+            case 'name':
+                return (a, b, isDir) => (a.name || '').localeCompare(b.name || '');
+            case 'line-rate':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.line_coverage_percent || 0) : (a.line_coverage_percent || 0);
+                    const bVal = isDir ? (b.stats?.line_coverage_percent || 0) : (b.line_coverage_percent || 0);
+                    return aVal - bVal;
+                };
+            case 'line-total':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.total_lines || 0) : (a.total_lines || 0);
+                    const bVal = isDir ? (b.stats?.total_lines || 0) : (b.total_lines || 0);
+                    return aVal - bVal;
+                };
+            case 'line-hit':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.covered_lines || 0) : (a.covered_lines || 0);
+                    const bVal = isDir ? (b.stats?.covered_lines || 0) : (b.covered_lines || 0);
+                    return aVal - bVal;
+                };
+            case 'func-rate':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.function_coverage_percent || 0) : (a.function_coverage_percent || 0);
+                    const bVal = isDir ? (b.stats?.function_coverage_percent || 0) : (b.function_coverage_percent || 0);
+                    return aVal - bVal;
+                };
+            case 'func-total':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.total_functions || 0) : (a.total_functions || 0);
+                    const bVal = isDir ? (b.stats?.total_functions || 0) : (b.total_functions || 0);
+                    return aVal - bVal;
+                };
+            case 'func-hit':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.covered_functions || 0) : (a.covered_functions || 0);
+                    const bVal = isDir ? (b.stats?.covered_functions || 0) : (b.covered_functions || 0);
+                    return aVal - bVal;
+                };
+            default:
+                return (a, b) => 0;
+        }
+    }
+
+    function updateSortHeaders() {
+        document.querySelectorAll('.sortable-header').forEach(th => {
+            const indicator = th.querySelector('.sort-indicator');
+            if (th.dataset.sort === currentSort) {
+                if (!indicator) {
+                    th.innerHTML = th.textContent.trim() + ' <span class="sort-indicator">' + (sortAsc ? '↑' : '↓') + '</span>';
+                } else {
+                    indicator.textContent = sortAsc ? '↑' : '↓';
+                }
+            } else {
+                if (indicator) indicator.remove();
+            }
+        });
     }
 
     function getFileIcon(filename) {
@@ -225,20 +301,13 @@
             }
         }
 
-        // Sort: dirs by uncovered, files by uncovered
-        dirs.sort((a, b) => (b.stats?.uncovered_lines || 0) - (a.stats?.uncovered_lines || 0));
-        files.sort((a, b) => (b.uncovered_lines || 0) - (a.uncovered_lines || 0));
+        // Sort by current sort setting (default: name)
+        sortItems(dirs, files);
 
         const hasFiles = files.length > 0;
         const hasDirs = dirs.length > 0;
         
-        let headerHtml = '<tr><th>Name</th>';
-        headerHtml += '<th colspan="3" class="text-center">Line Coverage</th>';
-        headerHtml += '<th colspan="3" class="text-center">Function Coverage</th></tr>';
-        headerHtml += '<tr class="subheader"><th></th>';
-        headerHtml += '<th class="text-center">Rate</th><th class="text-center">Total</th><th class="text-center">Hit</th>';
-        headerHtml += '<th class="text-center">Rate</th><th class="text-center">Total</th><th class="text-center">Hit</th></tr>';
-        thead.innerHTML = headerHtml;
+        updateSortHeaders();
 
         let html = '';
         
@@ -303,6 +372,21 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             this.classList.add('active');
             document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+        });
+    });
+
+    // Sortable headers click handler
+    document.querySelectorAll('.sortable-header').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', function() {
+            const newSort = this.dataset.sort;
+            if (currentSort === newSort) {
+                sortAsc = !sortAsc;
+            } else {
+                currentSort = newSort;
+                sortAsc = true;
+            }
+            updateTable(currentPath);
         });
     });
 
