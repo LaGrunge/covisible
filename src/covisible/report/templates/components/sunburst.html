@@ -44,6 +44,8 @@
         svg.setAttribute('width', size);
         svg.setAttribute('height', size);
         svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.style.display = 'block';
+        svg.style.margin = '0 auto';
         container.appendChild(svg);
         
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -200,20 +202,24 @@
             const bc = document.getElementById('sunburst-breadcrumb');
             if (!bc) return;
             
-            // Skip root (index 0), only show when zoomed in
+            // Show <whole project> for root level
             if (zoomStack.length <= 1) {
-                bc.innerHTML = '';
+                bc.innerHTML = '<span class="bc-current">&lt;whole project&gt;</span>';
                 return;
             }
             
-            bc.innerHTML = zoomStack.slice(1).map((n, i) => {
+            // Build breadcrumb: <whole project> / dir1 / dir2 / ...
+            let parts = ['<span class="bc-link" data-idx="0">&lt;whole project&gt;</span>'];
+            zoomStack.slice(1).forEach((n, i) => {
                 const name = n.name;
-                const realIdx = i + 1; // offset for skipped root
+                const realIdx = i + 1;
                 if (realIdx === zoomStack.length - 1) {
-                    return `<span class="bc-current">${name}</span>`;
+                    parts.push(`<span class="bc-current">${name}</span>`);
+                } else {
+                    parts.push(`<span class="bc-link" data-idx="${realIdx}">${name}</span>`);
                 }
-                return `<span class="bc-link" data-idx="${realIdx}">${name}</span>`;
-            }).join(' / ');
+            });
+            bc.innerHTML = parts.join(' / ');
             
             bc.querySelectorAll('.bc-link').forEach(el => {
                 el.addEventListener('click', () => {
