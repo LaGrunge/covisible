@@ -55,11 +55,13 @@
         // State
         let currentRoot = data;
         let zoomStack = [data];
+        let pathElements = new Map(); // Store path elements for animation
+        const animDuration = 400; // Animation duration in ms
+        const padAngle = 0.008;
+        const padRadius = 3;
         
-        function render(rootNode) {
-            g.innerHTML = '';
-            
-            // Collect visible nodes
+        // Collect nodes for a given root
+        function collectNodes(rootNode) {
             const nodes = [];
             function collect(node, depth, a0, a1) {
                 if (depth > 4) return;
@@ -78,61 +80,179 @@
                 }
             }
             collect(rootNode, 0, 0, Math.PI * 2);
+            return nodes;
+        }
+        
+        // Interpolate between two values
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        
+        // Animate transition between states
+        function animateTransition(fromNodes, toNodes, onComplete) {
+            const startTime = performance.now();
             
-            // Draw arcs (skip root) with gaps between sectors
-            const padAngle = 0.008; // Gap between sectors in radians
-            const padRadius = 3; // Gap between rings in pixels
+            // Build lookup maps
+            const fromMap = new Map();
+            fromNodes.forEach(n => fromMap.set(n.node.path || n.node.name, n));
+            const toMap = new Map();
+            toNodes.forEach(n => toMap.set(n.node.path || n.node.name, n));
             
-            nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
-                const inner = innerR + (depth - 1) * ringWidth + padRadius;
-                const outer = innerR + depth * ringWidth - padRadius;
+            function animate(currentTime) {
+                const elapsed = currentTime - startTime;
+                const t = Math.min(elapsed / animDuration, 1);
+                const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
                 
-                // Add angular padding
-                const arcSpan = a1 - a0;
-                const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
-                const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
-                
-                if (paddedA1 <= paddedA0) return; // Skip if too small
-                
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
-                path.setAttribute('fill', getCoverageColor(node.coverage_percent));
-                path.setAttribute('stroke', 'none');
-                path.style.cursor = 'pointer';
-                path.style.transition = 'fill 0.2s, transform 0.2s';
-                
-                path.addEventListener('mouseenter', () => {
-                    path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
-                    path.style.transform = 'scale(1.02)';
-                    showInfo(node);
-                });
-                
-                path.addEventListener('mouseleave', () => {
-                    path.setAttribute('fill', getCoverageColor(node.coverage_percent));
-                    path.style.transform = '';
-                    hideInfo();
-                });
-                
-                path.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (node.is_file && node.full_path) {
-                        // Navigate to file page - use full path like other links
-                        const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
-                        window.location.href = 'files/' + filePath + '.html';
-                    } else if (node.children && node.children.length) {
-                        // Zoom into this node
-                        zoomStack.push(node);
-                        currentRoot = node;
-                        render(node);
-                        updateBreadcrumb();
+                pathElements.forEach((path, key) => {
+                    const from = fromMap.get(key);
+                    const to = toMap.get(key);
+                    
+                    if (from && to) {
+                        // Interpolate position
+                        const a0 = lerp(from.a0, to.a0, easeT);
+                        const a1 = lerp(from.a1, to.a1, easeT);
+                        const depth = lerp(from.depth, to.depth, easeT);
+                        
+                        const inner = innerR + (depth - 1) * ringWidth + padRadius;
+                        const outer = innerR + depth * ringWidth - padRadius;
+                        
+                        const arcSpan = a1 - a0;
+                        const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
+                        const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
+                        
+                        if (paddedA1 > paddedA0 && inner > 0 && outer > inner) {
+                            path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
+                            path.style.opacity = '1';
+                        } else {
+                            path.style.opacity = '0';
+                        }
+                    } else if (to && !from) {
+                        // Fade in new elements
+                        path.style.opacity = easeT.toString();
+                    } else if (from && !to) {
+                        // Fade out removed elements
+                        path.style.opacity = (1 - easeT).toString();
                     }
                 });
                 
-                g.appendChild(path);
-            });
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    if (onComplete) onComplete();
+                }
+            }
             
-            // Center group (clickable)
-            const centerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            requestAnimationFrame(animate);
+        }
+        
+        function render(rootNode, animate = false, prevNodes = null) {
+            const nodes = collectNodes(rootNode);
+            
+            if (!animate || !prevNodes) {
+                // Initial render or no animation
+                g.innerHTML = '';
+                pathElements.clear();
+                
+                nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
+                    const inner = innerR + (depth - 1) * ringWidth + padRadius;
+                    const outer = innerR + depth * ringWidth - padRadius;
+                    
+                    const arcSpan = a1 - a0;
+                    const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
+                    const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
+                    
+                    if (paddedA1 <= paddedA0) return;
+                    
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
+                    path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                    path.setAttribute('stroke', 'none');
+                    path.style.cursor = 'pointer';
+                    
+                    path.addEventListener('mouseenter', () => {
+                        path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+                        showInfo(node);
+                    });
+                    
+                    path.addEventListener('mouseleave', () => {
+                        path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                        hideInfo();
+                    });
+                    
+                    path.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (node.is_file && node.full_path) {
+                            const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
+                            window.location.href = 'files/' + filePath + '.html';
+                        } else if (node.children && node.children.length) {
+                            const prevNodes = collectNodes(currentRoot);
+                            zoomStack.push(node);
+                            currentRoot = node;
+                            render(node, true, prevNodes);
+                            updateBreadcrumb();
+                        }
+                    });
+                    
+                    pathElements.set(node.path || node.name, path);
+                    g.appendChild(path);
+                });
+            } else {
+                // Animated transition
+                // First, add any new paths that don't exist yet
+                nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
+                    const key = node.path || node.name;
+                    if (!pathElements.has(key)) {
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                        path.setAttribute('stroke', 'none');
+                        path.style.cursor = 'pointer';
+                        path.style.opacity = '0';
+                        
+                        path.addEventListener('mouseenter', () => {
+                            path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+                            showInfo(node);
+                        });
+                        
+                        path.addEventListener('mouseleave', () => {
+                            path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                            hideInfo();
+                        });
+                        
+                        path.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (node.is_file && node.full_path) {
+                                const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
+                                window.location.href = 'files/' + filePath + '.html';
+                            } else if (node.children && node.children.length) {
+                                const prevNodes = collectNodes(currentRoot);
+                                zoomStack.push(node);
+                                currentRoot = node;
+                                render(node, true, prevNodes);
+                                updateBreadcrumb();
+                            }
+                        });
+                        
+                        pathElements.set(key, path);
+                        g.insertBefore(path, g.firstChild);
+                    }
+                });
+                
+                animateTransition(prevNodes, nodes, () => {
+                    // Clean up paths that are no longer visible
+                    const nodeKeys = new Set(nodes.map(n => n.node.path || n.node.name));
+                    pathElements.forEach((path, key) => {
+                        if (!nodeKeys.has(key)) {
+                            path.remove();
+                            pathElements.delete(key);
+                        }
+                    });
+                });
+            }
+            
+            // Center group (clickable) - always recreate
+            let centerG = g.querySelector('.center-group');
+            if (centerG) centerG.remove();
+            
+            centerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            centerG.setAttribute('class', 'center-group');
             centerG.style.cursor = zoomStack.length > 1 ? 'pointer' : 'default';
             
             const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -153,12 +273,13 @@
             text.textContent = rootNode.coverage_percent.toFixed(1) + '%';
             centerG.appendChild(text);
             
-            // Click handler on entire center group
+            // Click handler on entire center group - animated zoom out
             centerG.addEventListener('click', () => {
                 if (zoomStack.length > 1) {
+                    const prevNodes = collectNodes(currentRoot);
                     zoomStack.pop();
                     currentRoot = zoomStack[zoomStack.length - 1];
-                    render(currentRoot);
+                    render(currentRoot, true, prevNodes);
                     updateBreadcrumb();
                 }
             });
