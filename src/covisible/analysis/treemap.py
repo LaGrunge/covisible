@@ -15,6 +15,7 @@ class TreemapNode:
 
     name: str
     path: str
+    full_path: str = ""
     total_lines: int = 0
     covered_lines: int = 0
     children: dict[str, TreemapNode] = field(default_factory=dict)
@@ -35,6 +36,7 @@ class TreemapNode:
         result: dict[str, Any] = {
             "name": self.name,
             "path": self.path,
+            "full_path": self.full_path,
             "total_lines": self.total_lines,
             "covered_lines": self.covered_lines,
             "uncovered_lines": self.uncovered_lines,
@@ -104,6 +106,7 @@ class TreemapBuilder:
                 current.children[part] = TreemapNode(
                     name=part,
                     path=path_so_far,
+                    full_path=str(file_path) if is_last else "",
                     is_file=is_last,
                 )
 
@@ -112,6 +115,7 @@ class TreemapBuilder:
             if is_last:
                 current.total_lines = total_lines
                 current.covered_lines = covered_lines
+                current.full_path = str(file_path)
 
     def _propagate_totals(self, node: TreemapNode) -> tuple[int, int]:
         """Propagate totals up the tree."""
