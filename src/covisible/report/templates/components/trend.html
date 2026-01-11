@@ -1,0 +1,170 @@
+<!-- Coverage Trend Graph Component -->
+{% if trend_data and trend_data|length > 1 %}
+<section class="trend-section">
+    <h2>Coverage Trend</h2>
+    <div class="trend-container">
+        <div class="trend-chart" id="trend-chart"></div>
+        <div class="trend-stats" id="trend-stats">
+            {% if coverage_delta %}
+            <div class="trend-delta {{ 'positive' if coverage_delta.line_coverage_delta >= 0 else 'negative' }}">
+                <span class="delta-arrow">{{ '↑' if coverage_delta.line_coverage_delta >= 0 else '↓' }}</span>
+                <span class="delta-value">{{ coverage_delta.line_coverage_delta|abs|round(2) }}%</span>
+                <span class="delta-label">since last build</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<script>
+(function() {
+    const trendData = {{ trend_data | tojson }};
+    
+    function renderTrendChart(data, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container || data.length < 2) return;
+        
+        const width = container.clientWidth || 600;
+        const height = 200;
+        const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+        
+        // Create SVG
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        container.appendChild(svg);
+        
+        // Calculate scales
+        const values = data.map(d => d.line_coverage_percent);
+        const minVal = Math.max(0, Math.min(...values) - 5);
+        const maxVal = Math.min(100, Math.max(...values) + 5);
+        
+        const xScale = (i) => padding.left + (i / (data.length - 1)) * chartWidth;
+        const yScale = (v) => padding.top + chartHeight - ((v - minVal) / (maxVal - minVal)) * chartHeight;
+        
+        // Draw grid lines
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (i / 4) * chartHeight;
+            const val = maxVal - (i / 4) * (maxVal - minVal);
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', padding.left);
+            line.setAttribute('y1', y);
+            line.setAttribute('x2', width - padding.right);
+            line.setAttribute('y2', y);
+            line.setAttribute('stroke', 'var(--border-color)');
+            line.setAttribute('stroke-dasharray', '2,2');
+            svg.appendChild(line);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', padding.left - 5);
+            text.setAttribute('y', y + 4);
+            text.setAttribute('text-anchor', 'end');
+            text.setAttribute('fill', 'var(--text-muted)');
+            text.setAttribute('font-size', '11');
+            text.textContent = val.toFixed(0) + '%';
+            svg.appendChild(text);
+        }
+        
+        // Draw area fill
+        let areaPath = `M ${xScale(0)} ${yScale(data[0].line_coverage_percent)}`;
+        data.forEach((d, i) => {
+            areaPath += ` L ${xScale(i)} ${yScale(d.line_coverage_percent)}`;
+        });
+        areaPath += ` L ${xScale(data.length - 1)} ${padding.top + chartHeight}`;
+        areaPath += ` L ${xScale(0)} ${padding.top + chartHeight} Z`;
+        
+        const area = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        area.setAttribute('d', areaPath);
+        area.setAttribute('fill', 'var(--accent-color)');
+        area.setAttribute('fill-opacity', '0.1');
+        svg.appendChild(area);
+        
+        // Draw line
+        let linePath = `M ${xScale(0)} ${yScale(data[0].line_coverage_percent)}`;
+        data.forEach((d, i) => {
+            linePath += ` L ${xScale(i)} ${yScale(d.line_coverage_percent)}`;
+        });
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        line.setAttribute('d', linePath);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke', 'var(--accent-color)');
+        line.setAttribute('stroke-width', '2');
+        svg.appendChild(line);
+        
+        // Draw points
+        data.forEach((d, i) => {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', xScale(i));
+            circle.setAttribute('cy', yScale(d.line_coverage_percent));
+            circle.setAttribute('r', '4');
+            circle.setAttribute('fill', 'var(--accent-color)');
+            circle.setAttribute('stroke', 'var(--bg-primary)');
+            circle.setAttribute('stroke-width', '2');
+            circle.style.cursor = 'pointer';
+            
+            // Tooltip
+            const date = new Date(d.timestamp).toLocaleDateString();
+            circle.addEventListener('mouseenter', (e) => {
+                showTooltip(e, `${date}\n${d.line_coverage_percent.toFixed(1)}%\n${d.commit ? d.commit.slice(0, 7) : ''}`);
+            });
+            circle.addEventListener('mouseleave', hideTooltip);
+            
+            svg.appendChild(circle);
+        });
+        
+        // X-axis labels (first and last)
+        if (data.length > 0) {
+            const firstDate = new Date(data[0].timestamp).toLocaleDateString();
+            const lastDate = new Date(data[data.length - 1].timestamp).toLocaleDateString();
+            
+            const firstLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            firstLabel.setAttribute('x', padding.left);
+            firstLabel.setAttribute('y', height - 5);
+            firstLabel.setAttribute('fill', 'var(--text-muted)');
+            firstLabel.setAttribute('font-size', '11');
+            firstLabel.textContent = firstDate;
+            svg.appendChild(firstLabel);
+            
+            const lastLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            lastLabel.setAttribute('x', width - padding.right);
+            lastLabel.setAttribute('y', height - 5);
+            lastLabel.setAttribute('text-anchor', 'end');
+            lastLabel.setAttribute('fill', 'var(--text-muted)');
+            lastLabel.setAttribute('font-size', '11');
+            lastLabel.textContent = lastDate;
+            svg.appendChild(lastLabel);
+        }
+    }
+    
+    // Tooltip helpers
+    let tooltip = null;
+    
+    function showTooltip(e, text) {
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.className = 'trend-tooltip';
+            document.body.appendChild(tooltip);
+        }
+        tooltip.textContent = text;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (e.pageX + 10) + 'px';
+        tooltip.style.top = (e.pageY - 10) + 'px';
+    }
+    
+    function hideTooltip() {
+        if (tooltip) {
+            tooltip.style.display = 'none';
+        }
+    }
+    
+    if (trendData && trendData.length > 1) {
+        renderTrendChart(trendData, 'trend-chart');
+    }
+})();
+</script>
+{% endif %}

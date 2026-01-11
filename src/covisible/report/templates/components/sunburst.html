@@ -1,0 +1,314 @@
+<!-- Sunburst Chart Component -->
+<section class="sunburst-section">
+    <h2>Coverage Sunburst</h2>
+    <div class="sunburst-container">
+        <div class="sunburst-chart" id="sunburst-chart"></div>
+        <div class="sunburst-info" id="sunburst-info">
+            <div class="sunburst-info-name">Hover over segments</div>
+            <div class="sunburst-info-stats"></div>
+        </div>
+    </div>
+    <div class="sunburst-legend">
+        <span class="legend-item"><span class="legend-color coverage-high"></span> ≥80%</span>
+        <span class="legend-item"><span class="legend-color coverage-medium"></span> 50-80%</span>
+        <span class="legend-item"><span class="legend-color coverage-low"></span> &lt;50%</span>
+    </div>
+</section>
+
+<script>
+(function() {
+    const sunburstData = {{ treemap_data | tojson }};
+    let sunburstRendered = false;
+    
+    // Debug: log data
+    console.log('Sunburst data:', sunburstData);
+    
+    function renderSunburst(data, containerId) {
+        const container = document.getElementById(containerId);
+        console.log('Rendering sunburst, container:', container, 'data:', data);
+        
+        if (!container) {
+            console.error('Sunburst container not found');
+            return;
+        }
+        if (!data || !data.children || data.children.length === 0) {
+            console.error('Sunburst data has no children:', data);
+            container.innerHTML = '<p style="text-align:center;color:var(--text-muted);">No data to display</p>';
+            return;
+        }
+        
+        // Clear any existing content
+        container.innerHTML = '';
+        
+        // Use fixed size
+        const width = 400;
+        const height = 400;
+        const radius = width / 2;
+        
+        // Create SVG
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+        svg.setAttribute('viewBox', `${-width/2} ${-height/2} ${width} ${height}`);
+        svg.style.font = '12px sans-serif';
+        container.appendChild(svg);
+        
+        // Build hierarchy
+        const hierarchy = buildHierarchy(data);
+        const root = partition(hierarchy, radius);
+        
+        // Draw arcs
+        root.descendants().slice(1).forEach(d => {
+            const arc = createArc(d, radius);
+            if (arc) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', arc);
+                path.setAttribute('fill', getCoverageColor(d.data.coverage_percent));
+                path.setAttribute('stroke', 'var(--bg-primary)');
+                path.setAttribute('stroke-width', '1');
+                path.style.cursor = 'pointer';
+                path.style.transition = 'opacity 0.2s';
+                
+                // Hover effects
+                path.addEventListener('mouseenter', () => {
+                    path.style.opacity = '0.8';
+                    updateInfo(d.data);
+                });
+                path.addEventListener('mouseleave', () => {
+                    path.style.opacity = '1';
+                    resetInfo();
+                });
+                path.addEventListener('click', () => {
+                    if (d.children) {
+                        zoomTo(d);
+                    }
+                });
+                
+                svg.appendChild(path);
+            }
+        });
+        
+        // Center circle for zoom out
+        const centerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        centerCircle.setAttribute('r', radius * 0.15);
+        centerCircle.setAttribute('fill', 'var(--bg-secondary)');
+        centerCircle.setAttribute('stroke', 'var(--border-color)');
+        centerCircle.style.cursor = 'pointer';
+        centerCircle.addEventListener('click', () => zoomTo(root));
+        svg.appendChild(centerCircle);
+        
+        // Center text
+        const centerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        centerText.setAttribute('text-anchor', 'middle');
+        centerText.setAttribute('dy', '0.35em');
+        centerText.setAttribute('fill', 'var(--text-primary)');
+        centerText.style.fontSize = '14px';
+        centerText.style.fontWeight = '600';
+        centerText.textContent = data.coverage_percent.toFixed(1) + '%';
+        svg.appendChild(centerText);
+        
+        let currentRoot = root;
+        
+        function zoomTo(target) {
+            currentRoot = target;
+            const t = target;
+            
+            // Animate transition
+            root.descendants().slice(1).forEach((d, i) => {
+                const path = svg.querySelectorAll('path')[i];
+                if (path) {
+                    const visible = d.y0 >= t.y0 && d.y1 <= t.y1 + radius * 0.7;
+                    path.style.display = visible ? '' : 'none';
+                    
+                    if (visible) {
+                        // Recalculate arc for zoomed view
+                        const newArc = createArcZoomed(d, t, radius);
+                        if (newArc) {
+                            path.setAttribute('d', newArc);
+                        }
+                    }
+                }
+            });
+            
+            // Update center text
+            centerText.textContent = t.data.coverage_percent.toFixed(1) + '%';
+        }
+        
+        function updateInfo(nodeData) {
+            const infoEl = document.getElementById('sunburst-info');
+            if (infoEl) {
+                infoEl.querySelector('.sunburst-info-name').textContent = nodeData.path || nodeData.name;
+                infoEl.querySelector('.sunburst-info-stats').innerHTML = 
+                    `<span class="${getCoverageClass(nodeData.coverage_percent)}">${nodeData.coverage_percent.toFixed(1)}%</span> · ` +
+                    `${nodeData.covered_lines}/${nodeData.total_lines} lines`;
+            }
+        }
+        
+        function resetInfo() {
+            const infoEl = document.getElementById('sunburst-info');
+            if (infoEl) {
+                infoEl.querySelector('.sunburst-info-name').textContent = 'Hover over segments';
+                infoEl.querySelector('.sunburst-info-stats').innerHTML = '';
+            }
+        }
+    }
+    
+    function buildHierarchy(data) {
+        const node = {
+            name: data.name,
+            path: data.path,
+            coverage_percent: data.coverage_percent,
+            total_lines: data.total_lines,
+            covered_lines: data.covered_lines,
+            value: data.total_lines,
+            children: data.children ? data.children.map(buildHierarchy) : null
+        };
+        return node;
+    }
+    
+    function partition(data, radius) {
+        // Simple partition layout
+        const root = { data, depth: 0, x0: 0, x1: 2 * Math.PI, y0: 0, y1: radius * 0.15 };
+        
+        function layout(node, x0, x1, depth) {
+            node.x0 = x0;
+            node.x1 = x1;
+            node.y0 = radius * (0.15 + depth * 0.17);
+            node.y1 = radius * (0.15 + (depth + 1) * 0.17);
+            node.depth = depth;
+            
+            if (node.data.children) {
+                const total = node.data.children.reduce((s, c) => s + (c.total_lines || 1), 0);
+                let currentX = x0;
+                
+                node.children = node.data.children.map(child => {
+                    const childNode = { data: child };
+                    const extent = ((child.total_lines || 1) / total) * (x1 - x0);
+                    layout(childNode, currentX, currentX + extent, depth + 1);
+                    currentX += extent;
+                    return childNode;
+                });
+            }
+            
+            return node;
+        }
+        
+        layout(root, 0, 2 * Math.PI, 0);
+        
+        // Flatten for descendants()
+        function flatten(node, arr = []) {
+            arr.push(node);
+            if (node.children) {
+                node.children.forEach(c => flatten(c, arr));
+            }
+            return arr;
+        }
+        
+        root.descendants = () => flatten(root);
+        return root;
+    }
+    
+    function createArc(d, radius) {
+        if (d.x1 - d.x0 < 0.001) return null;
+        
+        const innerRadius = d.y0;
+        const outerRadius = d.y1;
+        const startAngle = d.x0 - Math.PI / 2;
+        const endAngle = d.x1 - Math.PI / 2;
+        
+        return describeArc(0, 0, innerRadius, outerRadius, startAngle, endAngle);
+    }
+    
+    function createArcZoomed(d, target, radius) {
+        if (d.x1 - d.x0 < 0.001) return null;
+        
+        // Scale angles relative to target
+        const scale = (2 * Math.PI) / (target.x1 - target.x0);
+        const x0 = (d.x0 - target.x0) * scale;
+        const x1 = (d.x1 - target.x0) * scale;
+        
+        // Scale radii
+        const depthDiff = d.depth - target.depth;
+        const innerRadius = radius * (0.15 + depthDiff * 0.17);
+        const outerRadius = radius * (0.15 + (depthDiff + 1) * 0.17);
+        
+        if (innerRadius < 0 || outerRadius > radius) return null;
+        
+        const startAngle = x0 - Math.PI / 2;
+        const endAngle = x1 - Math.PI / 2;
+        
+        return describeArc(0, 0, innerRadius, outerRadius, startAngle, endAngle);
+    }
+    
+    function describeArc(cx, cy, innerR, outerR, startAngle, endAngle) {
+        const x1 = cx + outerR * Math.cos(startAngle);
+        const y1 = cy + outerR * Math.sin(startAngle);
+        const x2 = cx + outerR * Math.cos(endAngle);
+        const y2 = cy + outerR * Math.sin(endAngle);
+        const x3 = cx + innerR * Math.cos(endAngle);
+        const y3 = cy + innerR * Math.sin(endAngle);
+        const x4 = cx + innerR * Math.cos(startAngle);
+        const y4 = cy + innerR * Math.sin(startAngle);
+        
+        const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+        
+        return `M ${x1} ${y1} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+    }
+    
+    function getCoverageColor(pct) {
+        if (pct >= 80) return '#22c55e'; // green
+        if (pct >= 50) return '#f59e0b'; // amber
+        return '#ef4444'; // red
+    }
+    
+    function getCoverageClass(pct) {
+        if (pct >= 80) return 'coverage-high';
+        if (pct >= 50) return 'coverage-medium';
+        return 'coverage-low';
+    }
+    
+    // Render when tab becomes visible
+    function tryRenderSunburst() {
+        if (sunburstRendered) return;
+        const container = document.getElementById('sunburst-chart');
+        const tabContent = document.getElementById('tab-sunburst');
+        
+        // Check if tab is active (visible)
+        const isVisible = tabContent && (
+            tabContent.classList.contains('active') || 
+            getComputedStyle(tabContent).display !== 'none'
+        );
+        
+        if (container && isVisible && sunburstData && sunburstData.children && sunburstData.children.length > 0) {
+            renderSunburst(sunburstData, 'sunburst-chart');
+            sunburstRendered = true;
+        }
+    }
+    
+    // Setup after DOM is ready
+    function setupSunburst() {
+        // Try on load
+        tryRenderSunburst();
+        
+        // Add listener to tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setTimeout(tryRenderSunburst, 100);
+            });
+        });
+    }
+    
+    // Wait for DOM
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupSunburst);
+    } else {
+        setupSunburst();
+    }
+    
+    // Also expose globally for manual trigger
+    window.renderSunburstChart = function() {
+        sunburstRendered = false;
+        tryRenderSunburst();
+    };
+})();
+</script>

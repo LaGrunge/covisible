@@ -1,0 +1,24 @@
+<!-- Coverage by Author Component -->
+{% if blame_authors and blame_authors|length > 0 %}
+<section class="authors-section">
+    <h2>Uncovered Code by Author</h2>
+    <div class="authors-list">
+        {% for author in blame_authors %}
+        <div class="author-card">
+            <div class="author-avatar">{{ author.name[0]|upper if author.name else '?' }}</div>
+            <div class="author-info">
+                <div class="author-name">{{ author.name or 'Unknown' }}</div>
+                <div class="author-email">{{ author.email or '' }}</div>
+            </div>
+            <div class="author-stats">
+                <div class="author-stat-value coverage-low">{{ author.total_uncovered_lines }}</div>
+                <div class="author-stat-label">uncovered lines</div>
+            </div>
+            <div class="author-files">
+                <span class="files-count">{{ author.files_count }} files</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

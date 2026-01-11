@@ -24,6 +24,12 @@
         </div>
     </section>
 
+    <!-- Coverage Trend (if history available) -->
+    {% include "components/trend.html" %}
+
+    <!-- Coverage by Author (if blame enabled) -->
+    {% include "components/authors.html" %}
+
     <!-- Tab navigation -->
     <nav class="tab-nav">
         <button class="tab-btn active" data-tab="modules">
@@ -33,6 +39,10 @@
         <button class="tab-btn" data-tab="files">
             <span class="tab-icon">📄</span>
             <span class="tab-text">All Files</span>
+        </button>
+        <button class="tab-btn" data-tab="sunburst">
+            <span class="tab-icon">🎯</span>
+            <span class="tab-text">Sunburst</span>
         </button>
     </nav>
 
@@ -85,6 +95,11 @@
             </a>
             {% endfor %}
         </div>
+    </div>
+
+    <!-- Tab: Sunburst -->
+    <div class="tab-content" id="tab-sunburst">
+        {% include "components/sunburst.html" %}
     </div>
 
     <!-- Embedded data for JS navigation -->

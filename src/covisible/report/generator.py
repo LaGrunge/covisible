@@ -12,6 +12,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from covisible.analysis.blame import get_uncovered_blame_summary
 from covisible.analysis.grouping import group_coverage_by_directory
+from covisible.analysis.history import CoverageHistory
 from covisible.analysis.pr_coverage import PRCoverageAnalyzer
 from covisible.analysis.treemap import build_treemap_data
 from covisible.core.models import CoverageData
@@ -29,6 +30,9 @@ class ReportGenerator:
         baseline: CoverageData | None = None,
         base_path: Path | str | None = None,
         enable_blame: bool = False,
+        history_file: Path | str | None = None,
+        commit: str | None = None,
+        branch: str | None = None,
     ) -> None:
         self.output_dir = output_dir
         self.title = title
@@ -37,6 +41,9 @@ class ReportGenerator:
         self.baseline = baseline or (analyzer.baseline if analyzer else None)
         self.base_path = Path(base_path) if base_path else None
         self.enable_blame = enable_blame
+        self.history = CoverageHistory(history_file) if history_file else None
+        self.commit = commit
+        self.branch = branch
 
         self.env = Environment(
             loader=PackageLoader("covisible", "report/templates"),
@@ -180,6 +187,27 @@ class ReportGenerator:
 
         # Add full tree data for SPA navigation
         context["full_tree_data"] = self._build_full_tree_for_spa()
+
+        # Add trend data if history is available
+        if self.history:
+            # Add current entry to history
+            self.history.add_entry(
+                line_coverage_percent=self.coverage.line_coverage_percent,
+                function_coverage_percent=self.coverage.function_coverage_percent,
+                total_lines=self.coverage.total_lines,
+                covered_lines=self.coverage.covered_lines,
+                total_functions=self.coverage.total_functions,
+                covered_functions=self.coverage.covered_functions,
+                total_files=self.coverage.total_files,
+                commit=self.commit,
+                branch=self.branch,
+            )
+            self.history.save()
+            context["trend_data"] = self.history.get_trend_data()
+            context["coverage_delta"] = self.history.get_delta()
+        else:
+            context["trend_data"] = []
+            context["coverage_delta"] = None
 
         return context
 
