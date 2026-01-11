@@ -79,16 +79,25 @@
             }
             collect(rootNode, 0, 0, Math.PI * 2);
             
-            // Draw arcs (skip root)
+            // Draw arcs (skip root) with gaps between sectors
+            const padAngle = 0.008; // Gap between sectors in radians
+            const padRadius = 3; // Gap between rings in pixels
+            
             nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
-                const inner = innerR + (depth - 1) * ringWidth;
-                const outer = innerR + depth * ringWidth - 2;
+                const inner = innerR + (depth - 1) * ringWidth + padRadius;
+                const outer = innerR + depth * ringWidth - padRadius;
+                
+                // Add angular padding
+                const arcSpan = a1 - a0;
+                const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
+                const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
+                
+                if (paddedA1 <= paddedA0) return; // Skip if too small
                 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', arcPath(inner, outer, a0, a1));
+                path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
                 path.setAttribute('fill', getCoverageColor(node.coverage_percent));
-                path.setAttribute('stroke', 'rgba(0,0,0,0.2)');
-                path.setAttribute('stroke-width', '0.5');
+                path.setAttribute('stroke', 'none');
                 path.style.cursor = 'pointer';
                 path.style.transition = 'fill 0.2s, transform 0.2s';
                 
