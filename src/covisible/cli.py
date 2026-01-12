@@ -379,8 +379,94 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
     
     console.print()
     
+    # Impacted Modules section
+    _print_impacted_modules(current, baseline)
+    
     # Impacted Files section
     _print_impacted_files(current, baseline, limit)
+
+
+def _print_impacted_modules(current, baseline) -> None:
+    """Print impacted modules (directories) with coverage changes."""
+    from collections import defaultdict
+    
+    def get_module(path: str) -> str:
+        """Extract top-level module from path."""
+        parts = path.split("/")
+        # Find src/ or similar and take next part, or just first directory
+        for i, part in enumerate(parts):
+            if part in ("src", "lib", "app", "pkg"):
+                if i + 1 < len(parts) - 1:
+                    return "/".join(parts[:i+2])
+        # Fallback: first directory
+        if len(parts) > 1:
+            return parts[0]
+        return path
+    
+    # Aggregate by module
+    current_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
+    baseline_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
+    
+    for path, f in current.files.items():
+        module = get_module(str(path))
+        current_modules[module]["covered"] += f.covered_lines
+        current_modules[module]["total"] += f.total_lines
+    
+    for path, f in baseline.files.items():
+        module = get_module(str(path))
+        baseline_modules[module]["covered"] += f.covered_lines
+        baseline_modules[module]["total"] += f.total_lines
+    
+    # Calculate deltas
+    impacted = []
+    all_modules = set(current_modules.keys()) | set(baseline_modules.keys())
+    
+    for module in all_modules:
+        curr = current_modules.get(module, {"covered": 0, "total": 0})
+        base = baseline_modules.get(module, {"covered": 0, "total": 0})
+        
+        curr_pct = (curr["covered"] / curr["total"] * 100) if curr["total"] > 0 else 0
+        base_pct = (base["covered"] / base["total"] * 100) if base["total"] > 0 else 0
+        
+        delta = curr_pct - base_pct
+        
+        if abs(delta) > 0.01:  # Only show if changed
+            impacted.append({
+                "module": module,
+                "coverage": curr_pct,
+                "baseline": base_pct,
+                "delta": delta,
+                "is_new": module not in baseline_modules,
+            })
+    
+    if not impacted:
+        return
+    
+    # Sort by absolute delta
+    impacted.sort(key=lambda x: abs(x["delta"]), reverse=True)
+    
+    # Print table
+    table = Table(show_header=True, box=None)
+    table.add_column("Impacted Modules", style="magenta", max_width=40)
+    table.add_column("Coverage Δ", justify="right")
+    
+    for item in impacted:
+        module = item["module"]
+        if len(module) > 40:
+            module = "..." + module[-37:]
+        
+        if item["is_new"]:
+            delta_str = f"{item['coverage']:.2f}% [blue](new)[/]"
+        else:
+            delta = item["delta"]
+            delta_style = "green" if delta >= 0 else "red"
+            delta_sign = "+" if delta >= 0 else ""
+            delta_str = f"{item['coverage']:.2f}% [{delta_style}]({delta_sign}{delta:.2f}%)[/]"
+        
+        table.add_row(module, delta_str)
+    
+    console.print(table)
+    console.print()
 
 
 def _format_delta(delta: int, positive_good: bool = True) -> str:
