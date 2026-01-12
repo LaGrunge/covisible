@@ -1221,12 +1221,8 @@ h3 {
     white-space: pre;
 }
 
-/* Hide non-added lines by default in PR view */
-.source-table:not(.show-all) .source-line:not(.line-added) {
-    display: none;
-}
-
-.source-table.show-all .source-line {
+/* Source lines are visible by default, hidden via JS with .diff-hidden class */
+.source-line {
     display: table-row;
 }
 
@@ -2639,4 +2635,139 @@ h3 {
 .delta-badge.delta-new {
     color: var(--accent-color);
     background: rgba(59, 130, 246, 0.15);
+}
+
+/* File viewer diff mode */
+.view-mode-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.view-mode-btn {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--bg-secondary);
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.view-mode-btn:hover {
+    background: var(--bg-tertiary);
+}
+
+.view-mode-btn.active {
+    background: var(--accent-color);
+    color: white;
+}
+
+.coverage-legend {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+    margin-left: auto;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.legend-item::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.legend-uncovered::before {
+    background: var(--color-uncovered);
+}
+
+.legend-partial::before {
+    background: var(--color-partial);
+}
+
+.legend-covered::before {
+    background: var(--color-covered);
+}
+
+/* Diff hidden lines */
+.source-line.diff-hidden {
+    display: none;
+}
+
+/* Diff separator row */
+.diff-separator-row {
+    background: var(--bg-tertiary);
+}
+
+.diff-separator-cell {
+    text-align: center;
+    padding: var(--spacing-xs) var(--spacing-md);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    letter-spacing: 2px;
+    border-top: 1px dashed var(--border-color);
+    border-bottom: 1px dashed var(--border-color);
+}
+
+/* Enhanced coverage change highlighting */
+.source-line.line-newly-covered {
+    background: rgba(34, 197, 94, 0.12) !important;
+}
+
+.source-line.line-newly-covered .line-number {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--color-covered);
+}
+
+.source-line.line-newly-covered::after {
+    content: '+';
+    position: absolute;
+    left: 4px;
+    color: var(--color-covered);
+    font-weight: bold;
+}
+
+.source-line.line-newly-uncovered {
+    background: rgba(239, 68, 68, 0.12) !important;
+}
+
+.source-line.line-newly-uncovered .line-number {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--color-uncovered);
+}
+
+.source-line.line-newly-uncovered::after {
+    content: '-';
+    position: absolute;
+    left: 4px;
+    color: var(--color-uncovered);
+    font-weight: bold;
+}
+
+/* Coverage indicator bar on left side */
+.source-line.line-coverage-changed {
+    position: relative;
+}
+
+.source-line.line-coverage-changed .line-number {
+    border-left: 3px solid;
+}
+
+.source-line.line-newly-covered .line-number {
+    border-left-color: var(--color-covered);
+}
+
+.source-line.line-newly-uncovered .line-number {
+    border-left-color: var(--color-uncovered);
 }

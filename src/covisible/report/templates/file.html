@@ -91,14 +91,16 @@
     {% endif %}
 
     <div class="view-controls">
-        <label class="toggle">
-            <input type="checkbox" id="show-all-lines" {% if not pr_coverage %}checked{% endif %}>
-            <span>Show all lines</span>
-        </label>
-        <label class="toggle">
-            <input type="checkbox" id="show-line-numbers" checked>
-            <span>Line numbers</span>
-        </label>
+        {% if baseline_coverage %}
+        <div class="view-mode-toggle">
+            <button class="view-mode-btn active" data-mode="diff" id="btn-diff">Diff View</button>
+            <button class="view-mode-btn" data-mode="full" id="btn-full">Full File</button>
+        </div>
+        <div class="coverage-legend">
+            <span class="legend-item legend-covered">Covered</span>
+            <span class="legend-item legend-uncovered">Uncovered</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="source-container">
@@ -123,7 +125,8 @@
                     data-line="{{ line_num }}"
                     data-added="{{ is_added|lower }}"
                     data-covered="{{ is_covered|lower if is_covered is not none else 'na' }}"
-                    data-baseline-covered="{{ baseline_is_covered|lower if baseline_is_covered is not none else 'na' }}">
+                    data-baseline-covered="{{ baseline_is_covered|lower if baseline_is_covered is not none else 'na' }}"
+                    data-changed="{{ (coverage_changed or is_added)|lower }}">
 
                     <td class="line-number">{{ line_num }}</td>
                     <td class="line-status">
@@ -161,6 +164,107 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.line-code code').forEach(function(block) {
         hljs.highlightElement(block);
     });
+    
+    // Diff/Full view toggle
+    const btnDiff = document.getElementById('btn-diff');
+    const btnFull = document.getElementById('btn-full');
+    const sourceTable = document.getElementById('source-table');
+    
+    function applyViewMode(mode) {
+        if (!sourceTable) return;
+        
+        const lines = sourceTable.querySelectorAll('.source-line');
+        
+        if (mode === 'full') {
+            // Full view - show all lines
+            lines.forEach(line => line.classList.remove('diff-hidden'));
+            removeDiffSeparators();
+            return;
+        }
+        
+        // Diff mode - show only changed lines and context (3 lines before/after)
+        const changedIndices = [];
+        lines.forEach((line, idx) => {
+            if (line.dataset.changed === 'true') {
+                changedIndices.push(idx);
+            }
+        });
+        
+        // If no changes, show all lines
+        if (changedIndices.length === 0) {
+            lines.forEach(line => line.classList.remove('diff-hidden'));
+            removeDiffSeparators();
+            return;
+        }
+        
+        // Hide lines not in context of changes
+        lines.forEach((line, idx) => {
+            let showLine = false;
+            for (const changedIdx of changedIndices) {
+                if (Math.abs(idx - changedIdx) <= 3) {
+                    showLine = true;
+                    break;
+                }
+            }
+            
+            if (showLine) {
+                line.classList.remove('diff-hidden');
+            } else {
+                line.classList.add('diff-hidden');
+            }
+        });
+        
+        // Add separators between non-contiguous chunks
+        addDiffSeparators();
+    }
+    
+    function addDiffSeparators() {
+        removeDiffSeparators();
+        if (!sourceTable) return;
+        
+        const lines = Array.from(sourceTable.querySelectorAll('.source-line'));
+        let prevVisibleIdx = -999;
+        
+        lines.forEach((line, idx) => {
+            if (!line.classList.contains('diff-hidden')) {
+                if (prevVisibleIdx >= 0 && idx - prevVisibleIdx > 1) {
+                    // Gap detected, add separator
+                    const separator = document.createElement('tr');
+                    separator.className = 'diff-separator-row';
+                    separator.innerHTML = '<td colspan="4" class="diff-separator-cell">···</td>';
+                    line.parentNode.insertBefore(separator, line);
+                }
+                prevVisibleIdx = idx;
+            }
+        });
+    }
+    
+    function removeDiffSeparators() {
+        if (!sourceTable) return;
+        sourceTable.querySelectorAll('.diff-separator-row').forEach(el => el.remove());
+    }
+    
+    // Bind click handlers
+    if (btnDiff) {
+        btnDiff.addEventListener('click', function() {
+            btnDiff.classList.add('active');
+            if (btnFull) btnFull.classList.remove('active');
+            applyViewMode('diff');
+        });
+    }
+    
+    if (btnFull) {
+        btnFull.addEventListener('click', function() {
+            if (btnDiff) btnDiff.classList.remove('active');
+            btnFull.classList.add('active');
+            applyViewMode('full');
+        });
+    }
+    
+    // Initialize diff view if buttons exist
+    if (btnDiff) {
+        applyViewMode('diff');
+    }
 
     // Function search and dropdown
     const funcSearch = document.getElementById('func-search');
