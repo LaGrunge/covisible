@@ -19,11 +19,16 @@
     const sunburstData = {{ treemap_data | tojson }};
     let sunburstRendered = false;
     
-    // Gradient colors - modern and semi-transparent
+    // Gradient color based on coverage percentage (0% = red, 100% = green)
     function getCoverageColor(pct, alpha = 0.85) {
-        if (pct >= 80) return `rgba(16, 185, 129, ${alpha})`; // emerald
-        if (pct >= 50) return `rgba(245, 158, 11, ${alpha})`; // amber
-        return `rgba(239, 68, 68, ${alpha})`; // red
+        // Clamp percentage to 0-100
+        const p = Math.max(0, Math.min(100, pct)) / 100;
+        // Interpolate from red (0, 100, 60) to green (120, 100, 45) in HSL
+        // Red: hsl(0, 100%, 60%) -> Green: hsl(120, 100%, 40%)
+        const hue = p * 120; // 0 (red) to 120 (green)
+        const saturation = 75 + p * 10; // 75% to 85%
+        const lightness = 50 - p * 10; // 50% to 40% (darker green for better contrast)
+        return `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
     }
     
     function renderSunburst(data, containerId) {
