@@ -2637,6 +2637,12 @@ h3 {
     background: rgba(59, 130, 246, 0.15);
 }
 
+/* Zero delta - gray color */
+.delta-inline.delta-zero,
+.file-list-delta.delta-zero {
+    color: var(--text-muted);
+}
+
 /* File viewer diff mode */
 .view-mode-toggle {
     display: flex;

@@ -300,9 +300,15 @@
                 <span class="file-list-stats">
                     <span class="file-list-coverage {{ file.coverage_percent|coverage_class }}">{{ file.coverage_percent|format_percent }}</span>
                     {% if baseline and file.coverage_delta is not none %}
-                    <span class="file-list-delta {% if file.coverage_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                        {% if file.coverage_delta >= 0 %}▲{% else %}▼{% endif %}{{ "%.1f"|format(file.coverage_delta|abs) }}%
-                    </span>
+                        {% set abs_delta = file.coverage_delta|abs %}
+                        {% set intensity = [0.5 + (abs_delta / 100) * 0.5, 1.0]|min %}
+                        {% if abs_delta < 0.05 %}
+                    <span class="file-list-delta delta-zero">— {{ "%.1f"|format(abs_delta) }}%</span>
+                        {% elif file.coverage_delta >= 0 %}
+                    <span class="file-list-delta" style="color: rgba(34, 197, 94, {{ intensity }})">▲ +{{ "%.1f"|format(abs_delta) }}%</span>
+                        {% else %}
+                    <span class="file-list-delta" style="color: rgba(239, 68, 68, {{ intensity }})">▼ -{{ "%.1f"|format(abs_delta) }}%</span>
+                        {% endif %}
                     {% elif file.is_new_file %}
                     <span class="file-list-delta delta-new">NEW</span>
                     {% endif %}
@@ -353,11 +359,26 @@
     
     function formatDelta(delta, isPercent = false) {
         if (delta === null || delta === undefined) return '';
-        const sign = delta >= 0 ? '+' : '';
-        const cls = delta >= 0 ? 'delta-positive' : 'delta-negative';
-        const arrow = delta >= 0 ? '▲' : '▼';
         const val = isPercent ? delta.toFixed(1) + '%' : delta;
-        return '<span class="delta-inline ' + cls + '">' + arrow + ' ' + sign + val + '</span>';
+        
+        // Zero delta - gray
+        if (Math.abs(delta) < 0.05) {
+            return '<span class="delta-inline delta-zero">— ' + val + '</span>';
+        }
+        
+        const sign = delta >= 0 ? '+' : '';
+        const arrow = delta >= 0 ? '▲' : '▼';
+        
+        // Calculate intensity based on delta magnitude (0-100% maps to 0.5-1.0 opacity)
+        const absDelta = Math.abs(delta);
+        const intensity = Math.min(0.5 + (absDelta / 100) * 0.5, 1.0);
+        
+        // Use inline style for variable intensity
+        const color = delta >= 0 
+            ? 'rgba(34, 197, 94, ' + intensity + ')' 
+            : 'rgba(239, 68, 68, ' + intensity + ')';
+        
+        return '<span class="delta-inline" style="color: ' + color + '">' + arrow + ' ' + sign + val + '</span>';
     }
     
     function getBaselineStats(path) {
