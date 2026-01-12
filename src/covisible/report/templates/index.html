@@ -32,10 +32,21 @@
 
     <!-- Tab navigation -->
     <nav class="tab-nav">
+        {% if baseline %}
+        <button class="tab-btn active" data-tab="comparison">
+            <span class="tab-icon">📊</span>
+            <span class="tab-text">Comparison</span>
+        </button>
+        <button class="tab-btn" data-tab="modules">
+            <span class="tab-icon">📁</span>
+            <span class="tab-text">Modules</span>
+        </button>
+        {% else %}
         <button class="tab-btn active" data-tab="modules">
             <span class="tab-icon">📁</span>
             <span class="tab-text">Modules</span>
         </button>
+        {% endif %}
         <button class="tab-btn" data-tab="files">
             <span class="tab-icon">📄</span>
             <span class="tab-text">All Files</span>
@@ -46,8 +57,103 @@
         </button>
     </nav>
 
+    <!-- Tab: Comparison (if baseline) -->
+    {% if baseline %}
+    <div class="tab-content active" id="tab-comparison">
+        {% set line_delta = coverage.line_coverage_percent - baseline.line_coverage_percent %}
+        {% set lines_delta = coverage.covered_lines - baseline.covered_lines %}
+        {% set total_delta = coverage.total_lines - baseline.total_lines %}
+        {% set func_delta = coverage.function_coverage_percent - baseline.function_coverage_percent %}
+        {% set uncovered_delta = coverage.uncovered_lines - baseline.uncovered_lines %}
+        
+        <!-- Main delta hero -->
+        <div class="comparison-hero">
+            <div class="comparison-hero-delta {% if line_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                {% if line_delta >= 0 %}+{% endif %}{{ "%.2f"|format(line_delta) }}%
+            </div>
+            <div class="comparison-hero-label">Coverage Change</div>
+        </div>
+
+        <!-- Comparison table -->
+        <div class="comparison-table-container">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th class="text-right">Current</th>
+                        <th class="text-right">Baseline</th>
+                        <th class="text-right">Delta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Line Coverage</strong></td>
+                        <td class="text-right">{{ coverage.line_coverage_percent|format_percent }}</td>
+                        <td class="text-right text-muted">{{ baseline.line_coverage_percent|format_percent }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge {% if line_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                {% if line_delta >= 0 %}▲{% else %}▼{% endif %} {{ "%.2f"|format(line_delta|abs) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Covered Lines</strong></td>
+                        <td class="text-right">{{ coverage.covered_lines }}</td>
+                        <td class="text-right text-muted">{{ baseline.covered_lines }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge {% if lines_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                {% if lines_delta >= 0 %}+{% endif %}{{ lines_delta }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Uncovered Lines</strong></td>
+                        <td class="text-right">{{ coverage.uncovered_lines }}</td>
+                        <td class="text-right text-muted">{{ baseline.uncovered_lines }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge {% if uncovered_delta <= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                {% if uncovered_delta >= 0 %}+{% endif %}{{ uncovered_delta }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Lines</strong></td>
+                        <td class="text-right">{{ coverage.total_lines }}</td>
+                        <td class="text-right text-muted">{{ baseline.total_lines }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge delta-neutral">
+                                {% if total_delta >= 0 %}+{% endif %}{{ total_delta }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Function Coverage</strong></td>
+                        <td class="text-right">{{ coverage.function_coverage_percent|format_percent }}</td>
+                        <td class="text-right text-muted">{{ baseline.function_coverage_percent|format_percent }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge {% if func_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                {% if func_delta >= 0 %}▲{% else %}▼{% endif %} {{ "%.2f"|format(func_delta|abs) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Files</strong></td>
+                        <td class="text-right">{{ coverage.total_files }}</td>
+                        <td class="text-right text-muted">{{ baseline.total_files }}</td>
+                        <td class="text-right">
+                            <span class="delta-badge delta-neutral">
+                                {% if coverage.total_files - baseline.total_files >= 0 %}+{% endif %}{{ coverage.total_files - baseline.total_files }}
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Tab: Modules -->
-    <div class="tab-content active" id="tab-modules">
+    <div class="tab-content{% if not baseline %} active{% endif %}" id="tab-modules">
         <div class="files-table-container">
             <table class="files-table directory-table" id="browser-table">
                 <thead id="browser-thead">
