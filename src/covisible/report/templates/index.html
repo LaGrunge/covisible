@@ -61,94 +61,189 @@
     {% if baseline %}
     <div class="tab-content active" id="tab-comparison">
         {% set line_delta = coverage.line_coverage_percent - baseline.line_coverage_percent %}
-        {% set lines_delta = coverage.covered_lines - baseline.covered_lines %}
-        {% set total_delta = coverage.total_lines - baseline.total_lines %}
+        {% set lines_delta = coverage.total_lines - baseline.total_lines %}
+        {% set hits_delta = coverage.covered_lines - baseline.covered_lines %}
+        {% set misses_delta = coverage.uncovered_lines - baseline.uncovered_lines %}
         {% set func_delta = coverage.function_coverage_percent - baseline.function_coverage_percent %}
-        {% set uncovered_delta = coverage.uncovered_lines - baseline.uncovered_lines %}
+        {% set files_delta = coverage.total_files - baseline.total_files %}
         
-        <!-- Main delta hero -->
-        <div class="comparison-hero">
-            <div class="comparison-hero-delta {% if line_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                {% if line_delta >= 0 %}+{% endif %}{{ "%.2f"|format(line_delta) }}%
+        <!-- Coverage Diff Block (CodeCov style) -->
+        <div class="coverage-diff-block">
+            <div class="diff-header">
+                <span class="diff-title">@@</span>
+                <span class="diff-title-text">Coverage Diff</span>
+                <span class="diff-title">@@</span>
             </div>
-            <div class="comparison-hero-label">Coverage Change</div>
+            <div class="diff-subheader">
+                <span class="diff-col-label">##</span>
+                <span class="diff-col">base</span>
+                <span class="diff-col">head</span>
+                <span class="diff-col">+/-</span>
+                <span class="diff-col-label">##</span>
+            </div>
+            <div class="diff-separator"></div>
+            
+            <!-- Coverage row (highlighted) -->
+            <div class="diff-row diff-row-highlight {% if line_delta >= 0 %}diff-row-positive{% else %}diff-row-negative{% endif %}">
+                <span class="diff-indicator">{% if line_delta >= 0 %}+{% else %}-{% endif %}</span>
+                <span class="diff-metric">Coverage</span>
+                <span class="diff-value">{{ "%.2f"|format(baseline.line_coverage_percent) }}%</span>
+                <span class="diff-value">{{ "%.2f"|format(coverage.line_coverage_percent) }}%</span>
+                <span class="diff-delta {% if line_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                    {% if line_delta >= 0 %}+{% endif %}{{ "%.2f"|format(line_delta) }}%
+                </span>
+            </div>
+            <div class="diff-separator"></div>
+            
+            <!-- Files -->
+            <div class="diff-row">
+                <span class="diff-indicator"></span>
+                <span class="diff-metric">Files</span>
+                <span class="diff-value">{{ baseline.total_files }}</span>
+                <span class="diff-value">{{ coverage.total_files }}</span>
+                <span class="diff-delta {% if files_delta != 0 %}{% if files_delta > 0 %}delta-positive{% else %}delta-negative{% endif %}{% endif %}">
+                    {% if files_delta != 0 %}{% if files_delta > 0 %}+{% endif %}{{ files_delta }}{% endif %}
+                </span>
+            </div>
+            
+            <!-- Lines -->
+            <div class="diff-row">
+                <span class="diff-indicator"></span>
+                <span class="diff-metric">Lines</span>
+                <span class="diff-value">{{ baseline.total_lines }}</span>
+                <span class="diff-value">{{ coverage.total_lines }}</span>
+                <span class="diff-delta {% if lines_delta != 0 %}{% if lines_delta > 0 %}delta-positive{% else %}delta-negative{% endif %}{% endif %}">
+                    {% if lines_delta != 0 %}{% if lines_delta > 0 %}+{% endif %}{{ lines_delta }}{% endif %}
+                </span>
+            </div>
+            
+            <!-- Branches (if available) -->
+            {% if baseline.total_branches > 0 or coverage.total_branches > 0 %}
+            {% set branches_delta = coverage.total_branches - baseline.total_branches %}
+            <div class="diff-row">
+                <span class="diff-indicator"></span>
+                <span class="diff-metric">Branches</span>
+                <span class="diff-value">{{ baseline.total_branches }}</span>
+                <span class="diff-value">{{ coverage.total_branches }}</span>
+                <span class="diff-delta {% if branches_delta != 0 %}{% if branches_delta > 0 %}delta-positive{% else %}delta-negative{% endif %}{% endif %}">
+                    {% if branches_delta != 0 %}{% if branches_delta > 0 %}+{% endif %}{{ branches_delta }}{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            
+            <div class="diff-separator"></div>
+            
+            <!-- Hits -->
+            <div class="diff-row">
+                <span class="diff-indicator"></span>
+                <span class="diff-metric">Hits</span>
+                <span class="diff-value">{{ baseline.covered_lines }}</span>
+                <span class="diff-value">{{ coverage.covered_lines }}</span>
+                <span class="diff-delta {% if hits_delta > 0 %}delta-positive{% elif hits_delta < 0 %}delta-negative{% endif %}">
+                    {% if hits_delta != 0 %}{% if hits_delta > 0 %}+{% endif %}{{ hits_delta }}{% endif %}
+                </span>
+            </div>
+            
+            <!-- Misses -->
+            <div class="diff-row {% if misses_delta > 0 %}diff-row-negative{% elif misses_delta < 0 %}diff-row-positive{% endif %}">
+                <span class="diff-indicator">{% if misses_delta > 0 %}-{% elif misses_delta < 0 %}+{% endif %}</span>
+                <span class="diff-metric">Misses</span>
+                <span class="diff-value">{{ baseline.uncovered_lines }}</span>
+                <span class="diff-value">{{ coverage.uncovered_lines }}</span>
+                <span class="diff-delta {% if misses_delta > 0 %}delta-negative{% elif misses_delta < 0 %}delta-positive{% endif %}">
+                    {% if misses_delta != 0 %}{% if misses_delta > 0 %}+{% endif %}{{ misses_delta }}{% endif %}
+                </span>
+            </div>
+            
+            <!-- Partials (if branches available) -->
+            {% if baseline.total_branches > 0 or coverage.total_branches > 0 %}
+            {% set baseline_partials = baseline.total_branches - baseline.covered_branches %}
+            {% set current_partials = coverage.total_branches - coverage.covered_branches %}
+            {% set partials_delta = current_partials - baseline_partials %}
+            <div class="diff-row">
+                <span class="diff-indicator"></span>
+                <span class="diff-metric">Partials</span>
+                <span class="diff-value">{{ baseline_partials }}</span>
+                <span class="diff-value">{{ current_partials }}</span>
+                <span class="diff-delta {% if partials_delta > 0 %}delta-negative{% elif partials_delta < 0 %}delta-positive{% endif %}">
+                    {% if partials_delta != 0 %}{% if partials_delta > 0 %}+{% endif %}{{ partials_delta }}{% endif %}
+                </span>
+            </div>
+            {% endif %}
         </div>
-
-        <!-- Comparison table -->
-        <div class="comparison-table-container">
-            <table class="comparison-table">
+        
+        <!-- Impacted Modules Section -->
+        {% if impacted_modules %}
+        <div class="impacted-section">
+            <h3 class="impacted-title">Impacted Modules</h3>
+            <table class="impacted-table">
                 <thead>
                     <tr>
-                        <th>Metric</th>
-                        <th class="text-right">Current</th>
-                        <th class="text-right">Baseline</th>
-                        <th class="text-right">Delta</th>
+                        <th>Module</th>
+                        <th class="text-right">Coverage Δ</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><strong>Line Coverage</strong></td>
-                        <td class="text-right">{{ coverage.line_coverage_percent|format_percent }}</td>
-                        <td class="text-right text-muted">{{ baseline.line_coverage_percent|format_percent }}</td>
+                    {% for module in impacted_modules %}
+                    <tr class="{% if module.delta and module.delta >= 0 %}row-positive{% elif module.delta and module.delta < 0 %}row-negative{% endif %}">
+                        <td>
+                            <a href="#" class="impacted-link" onclick="navigateToModule('{{ module.path }}'); return false;">
+                                📁 {{ module.name }}
+                            </a>
+                        </td>
                         <td class="text-right">
-                            <span class="delta-badge {% if line_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                                {% if line_delta >= 0 %}▲{% else %}▼{% endif %} {{ "%.2f"|format(line_delta|abs) }}%
+                            <span class="coverage-value">{{ "%.2f"|format(module.coverage) }}%</span>
+                            {% if module.is_new %}
+                            <span class="delta-badge delta-new">new</span>
+                            {% elif module.delta is not none %}
+                            <span class="delta-badge {% if module.delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                ({% if module.delta >= 0 %}+{% endif %}{{ "%.2f"|format(module.delta) }}%)
                             </span>
+                            {% endif %}
                         </td>
                     </tr>
-                    <tr>
-                        <td><strong>Covered Lines</strong></td>
-                        <td class="text-right">{{ coverage.covered_lines }}</td>
-                        <td class="text-right text-muted">{{ baseline.covered_lines }}</td>
-                        <td class="text-right">
-                            <span class="delta-badge {% if lines_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                                {% if lines_delta >= 0 %}+{% endif %}{{ lines_delta }}
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Uncovered Lines</strong></td>
-                        <td class="text-right">{{ coverage.uncovered_lines }}</td>
-                        <td class="text-right text-muted">{{ baseline.uncovered_lines }}</td>
-                        <td class="text-right">
-                            <span class="delta-badge {% if uncovered_delta <= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                                {% if uncovered_delta >= 0 %}+{% endif %}{{ uncovered_delta }}
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Total Lines</strong></td>
-                        <td class="text-right">{{ coverage.total_lines }}</td>
-                        <td class="text-right text-muted">{{ baseline.total_lines }}</td>
-                        <td class="text-right">
-                            <span class="delta-badge delta-neutral">
-                                {% if total_delta >= 0 %}+{% endif %}{{ total_delta }}
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Function Coverage</strong></td>
-                        <td class="text-right">{{ coverage.function_coverage_percent|format_percent }}</td>
-                        <td class="text-right text-muted">{{ baseline.function_coverage_percent|format_percent }}</td>
-                        <td class="text-right">
-                            <span class="delta-badge {% if func_delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                                {% if func_delta >= 0 %}▲{% else %}▼{% endif %} {{ "%.2f"|format(func_delta|abs) }}%
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Files</strong></td>
-                        <td class="text-right">{{ coverage.total_files }}</td>
-                        <td class="text-right text-muted">{{ baseline.total_files }}</td>
-                        <td class="text-right">
-                            <span class="delta-badge delta-neutral">
-                                {% if coverage.total_files - baseline.total_files >= 0 %}+{% endif %}{{ coverage.total_files - baseline.total_files }}
-                            </span>
-                        </td>
-                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
+        {% endif %}
+        
+        <!-- Impacted Files Section -->
+        {% if impacted_files %}
+        <div class="impacted-section">
+            <h3 class="impacted-title">Impacted Files</h3>
+            <table class="impacted-table">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th class="text-right">Coverage Δ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in impacted_files %}
+                    <tr class="{% if file.delta and file.delta >= 0 %}row-positive{% elif file.delta and file.delta < 0 %}row-negative{% endif %}">
+                        <td>
+                            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html" class="impacted-link">
+                                <span class="file-list-icon" data-ext="{{ file.rel_path.split('.')[-1] }}"></span>
+                                {{ file.rel_path }}
+                            </a>
+                        </td>
+                        <td class="text-right">
+                            <span class="coverage-value">{{ "%.2f"|format(file.coverage) }}%</span>
+                            {% if file.is_new %}
+                            <span class="delta-badge delta-new">new</span>
+                            {% elif file.delta is not none %}
+                            <span class="delta-badge {% if file.delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                                ({% if file.delta >= 0 %}+{% endif %}{{ "%.2f"|format(file.delta) }}%)
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -281,6 +376,15 @@
         if (pct >= 80) return 'coverage-high';
         if (pct >= 50) return 'coverage-medium';
         return 'coverage-low';
+    }
+    
+    function navigateToModule(modulePath) {
+        // Switch to Modules tab and navigate to the module
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector('[data-tab="modules"]').classList.add('active');
+        document.getElementById('tab-modules').classList.add('active');
+        navigateTo(modulePath);
     }
 
     function formatPercent(val) {

@@ -157,6 +157,8 @@ class ReportGenerator:
         # Build baseline lookup for JS
         if self.baseline:
             context["baseline_tree_data"] = self._build_baseline_tree_for_spa()
+            context["impacted_modules"] = self._build_impacted_modules()
+            context["impacted_files"] = self._build_impacted_files()
 
         # Add treemap data
         context["treemap_data"] = build_treemap_data(self.coverage, self.base_path)
@@ -368,6 +370,119 @@ class ReportGenerator:
             files_list.append(file_data)
         
         return files_list
+
+    def _build_impacted_modules(self) -> list[dict[str, Any]]:
+        """Build list of modules with coverage changes for comparison tab."""
+        if not self.baseline:
+            return []
+        
+        from collections import defaultdict
+        
+        def get_module(path: Path) -> tuple[str, str]:
+            """Extract module name and path from file path."""
+            rel_path = self._get_relative_path(path)
+            parts = str(rel_path).split("/")
+            
+            # Find src/ or similar and take next part
+            for i, part in enumerate(parts):
+                if part in ("src", "lib", "app", "pkg"):
+                    if i + 1 < len(parts) - 1:
+                        module_path = "/".join(parts[:i+2])
+                        return parts[i+1], module_path
+            
+            # Fallback: first directory
+            if len(parts) > 1:
+                return parts[0], parts[0]
+            return str(rel_path), str(rel_path)
+        
+        # Aggregate by module
+        current_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
+        baseline_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
+        module_paths: dict[str, str] = {}
+        
+        for path, f in self.coverage.files.items():
+            name, mod_path = get_module(path)
+            current_modules[name]["covered"] += f.covered_lines
+            current_modules[name]["total"] += f.total_lines
+            module_paths[name] = mod_path
+        
+        for path, f in self.baseline.files.items():
+            name, mod_path = get_module(path)
+            baseline_modules[name]["covered"] += f.covered_lines
+            baseline_modules[name]["total"] += f.total_lines
+            if name not in module_paths:
+                module_paths[name] = mod_path
+        
+        # Calculate deltas
+        impacted = []
+        all_modules = set(current_modules.keys()) | set(baseline_modules.keys())
+        
+        for name in all_modules:
+            curr = current_modules.get(name, {"covered": 0, "total": 0})
+            base = baseline_modules.get(name, {"covered": 0, "total": 0})
+            
+            curr_pct = (curr["covered"] / curr["total"] * 100) if curr["total"] > 0 else 0
+            base_pct = (base["covered"] / base["total"] * 100) if base["total"] > 0 else 0
+            
+            delta = curr_pct - base_pct
+            
+            if abs(delta) > 0.01:  # Only show if changed
+                impacted.append({
+                    "name": name,
+                    "path": module_paths.get(name, name),
+                    "coverage": curr_pct,
+                    "baseline": base_pct,
+                    "delta": delta,
+                    "is_new": name not in baseline_modules,
+                })
+        
+        # Sort by absolute delta
+        impacted.sort(key=lambda x: abs(x["delta"]), reverse=True)
+        return impacted
+
+    def _build_impacted_files(self) -> list[dict[str, Any]]:
+        """Build list of files with coverage changes for comparison tab."""
+        if not self.baseline:
+            return []
+        
+        # Build baseline lookup by relative path
+        baseline_lookup: dict[str, Any] = {}
+        for path, file_cov in self.baseline.files.items():
+            rel_path = str(self._get_relative_path(path))
+            baseline_lookup[rel_path] = file_cov
+        
+        impacted = []
+        
+        for path, file_cov in self.coverage.files.items():
+            rel_path = str(self._get_relative_path(path))
+            
+            if rel_path in baseline_lookup:
+                baseline_file = baseline_lookup[rel_path]
+                delta = file_cov.line_coverage_percent - baseline_file.line_coverage_percent
+                
+                if abs(delta) > 0.01:  # Only show if changed
+                    impacted.append({
+                        "path": str(path),
+                        "rel_path": rel_path,
+                        "coverage": file_cov.line_coverage_percent,
+                        "baseline": baseline_file.line_coverage_percent,
+                        "delta": delta,
+                        "is_new": False,
+                    })
+            else:
+                # New file
+                impacted.append({
+                    "path": str(path),
+                    "rel_path": rel_path,
+                    "coverage": file_cov.line_coverage_percent,
+                    "baseline": None,
+                    "delta": None,
+                    "is_new": True,
+                })
+        
+        # Sort by absolute delta (new files last)
+        impacted.sort(key=lambda x: abs(x["delta"]) if x["delta"] is not None else -1, reverse=True)
+        return impacted[:20]  # Limit to top 20
 
     def _build_baseline_tree_for_spa(self) -> dict[str, Any]:
         """Build baseline tree structure for comparison in SPA."""
