@@ -2310,3 +2310,162 @@ h3 {
     color: var(--text-secondary);
     background: var(--bg-tertiary);
 }
+
+/* Inline delta for tables and file lists */
+.delta-inline {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--spacing-xs);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.delta-inline.delta-positive {
+    color: var(--color-covered);
+}
+
+.delta-inline.delta-negative {
+    color: var(--color-uncovered);
+}
+
+/* File list delta */
+.file-list-stats {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.file-list-delta {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.file-list-delta.delta-positive {
+    color: var(--color-covered);
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.file-list-delta.delta-negative {
+    color: var(--color-uncovered);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.file-list-delta.delta-new {
+    color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* New file badges */
+.badge-new-file {
+    display: inline-block;
+    margin-left: var(--spacing-xs);
+    padding: 1px 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.15);
+    border-radius: var(--radius-sm);
+    vertical-align: middle;
+}
+
+.badge-new-inline {
+    display: inline-block;
+    margin-left: var(--spacing-xs);
+    padding: 1px 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.15);
+    border-radius: var(--radius-sm);
+}
+
+/* New file row highlight */
+.file-row.file-new {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.file-list-item.file-new {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* Coverage cell with delta */
+.coverage-cell {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+/* File page baseline comparison */
+.stat-delta {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--spacing-xs);
+    padding: 2px 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+}
+
+.stat-delta.delta-positive {
+    color: var(--color-covered);
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.stat-delta.delta-negative {
+    color: var(--color-uncovered);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.file-baseline-comparison {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+}
+
+.baseline-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.baseline-stat {
+    color: var(--text-secondary);
+}
+
+/* Line-level baseline change indicators */
+.source-line.line-coverage-changed {
+    position: relative;
+}
+
+.source-line.line-coverage-changed::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-color);
+}
+
+.source-line.line-newly-covered {
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.source-line.line-newly-covered::before {
+    background: var(--color-covered);
+}
+
+.source-line.line-newly-uncovered {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.source-line.line-newly-uncovered::before {
+    background: var(--color-uncovered);
+}

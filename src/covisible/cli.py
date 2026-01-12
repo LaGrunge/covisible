@@ -159,6 +159,10 @@ def report(
             base_path=repo,
             enable_blame=blame,
         )
+        
+        # Print coverage diff summary if baseline provided
+        if baseline_cov:
+            _print_coverage_diff(current_cov, baseline_cov, limit=10)
 
     if output_format in ("html", "both"):
         generator.generate_html()
@@ -281,6 +285,186 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
 
     if len(file_list) > limit:
         console.print(f"\n[dim]... and {len(file_list) - limit} more files[/]")
+
+
+@main.command()
+@click.argument("current", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--baseline", "-b",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Baseline coverage file to compare against",
+)
+@click.option("--limit", "-n", type=int, default=10, help="Number of impacted files to show")
+def diff(current: Path, baseline: Path, limit: int) -> None:
+    """Show coverage diff between current and baseline (CodeCov style).
+    
+    Example: covisible diff coverage_new.lcov -b coverage.lcov
+    """
+    current_cov = detect_and_parse(current)
+    baseline_cov = detect_and_parse(baseline)
+    
+    _print_coverage_diff(current_cov, baseline_cov, limit)
+
+
+def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
+    """Print CodeCov-style coverage diff report."""
+    # Calculate deltas
+    coverage_delta = current.line_coverage_percent - baseline.line_coverage_percent
+    lines_delta = current.total_lines - baseline.total_lines
+    hits_delta = current.covered_lines - baseline.covered_lines
+    misses_delta = current.uncovered_lines - baseline.uncovered_lines
+    
+    # Header
+    console.print()
+    console.print("[bold]@@            Coverage Diff             @@[/]")
+    console.print("[dim]##             base      head    +/-   ##[/]")
+    console.print("[dim]" + "=" * 44 + "[/]")
+    
+    # Coverage line with color
+    delta_style = "green" if coverage_delta >= 0 else "red"
+    delta_sign = "+" if coverage_delta >= 0 else ""
+    prefix = "+" if coverage_delta >= 0 else "-"
+    prefix_style = "green" if coverage_delta >= 0 else "red"
+    
+    console.print(
+        f"[{prefix_style}]{prefix}[/] [bold]Coverage[/]   "
+        f"{baseline.line_coverage_percent:>6.2f}%   {current.line_coverage_percent:>6.2f}%   "
+        f"[{delta_style}]{delta_sign}{coverage_delta:>5.2f}%[/]"
+    )
+    console.print("[dim]" + "=" * 44 + "[/]")
+    
+    # Files, Lines
+    console.print(
+        f"  Files        {baseline.total_files:>6}    {current.total_files:>6}   "
+        f"{_format_delta(current.total_files - baseline.total_files)}"
+    )
+    console.print(
+        f"  Lines        {baseline.total_lines:>6}    {current.total_lines:>6}   "
+        f"{_format_delta(lines_delta)}"
+    )
+    
+    # Branches if available
+    if baseline.total_branches > 0 or current.total_branches > 0:
+        branches_delta = current.total_branches - baseline.total_branches
+        console.print(
+            f"  Branches     {baseline.total_branches:>6}    {current.total_branches:>6}   "
+            f"{_format_delta(branches_delta)}"
+        )
+    
+    console.print("[dim]" + "=" * 44 + "[/]")
+    
+    # Hits, Misses, Partials
+    console.print(
+        f"  Hits         {baseline.covered_lines:>6}    {current.covered_lines:>6}   "
+        f"{_format_delta(hits_delta, positive_good=True)}"
+    )
+    
+    misses_style = "red" if misses_delta > 0 else "green" if misses_delta < 0 else ""
+    misses_prefix = "-" if misses_delta > 0 else "+" if misses_delta < 0 else " "
+    console.print(
+        f"[{misses_style}]{misses_prefix}[/] Misses       {baseline.uncovered_lines:>6}    {current.uncovered_lines:>6}   "
+        f"{_format_delta(misses_delta, positive_good=False)}"
+    )
+    
+    # Partials (branches not fully covered) if available
+    if baseline.total_branches > 0 or current.total_branches > 0:
+        baseline_partials = baseline.total_branches - baseline.covered_branches
+        current_partials = current.total_branches - current.covered_branches
+        partials_delta = current_partials - baseline_partials
+        console.print(
+            f"  Partials     {baseline_partials:>6}    {current_partials:>6}   "
+            f"{_format_delta(partials_delta, positive_good=False)}"
+        )
+    
+    console.print()
+    
+    # Impacted Files section
+    _print_impacted_files(current, baseline, limit)
+
+
+def _format_delta(delta: int, positive_good: bool = True) -> str:
+    """Format delta value with color."""
+    if delta == 0:
+        return "      "
+    
+    sign = "+" if delta > 0 else ""
+    
+    if positive_good:
+        style = "green" if delta > 0 else "red"
+    else:
+        style = "red" if delta > 0 else "green"
+    
+    return f"[{style}]{sign}{delta:>5}[/]"
+
+
+def _print_impacted_files(current, baseline, limit: int) -> None:
+    """Print impacted files table."""
+    # Build file comparison
+    impacted = []
+    
+    # Get all file paths from both
+    current_files = {str(p): f for p, f in current.files.items()}
+    baseline_files = {str(p): f for p, f in baseline.files.items()}
+    
+    all_paths = set(current_files.keys()) | set(baseline_files.keys())
+    
+    for path in all_paths:
+        curr_file = current_files.get(path)
+        base_file = baseline_files.get(path)
+        
+        if curr_file and base_file:
+            # File exists in both - calculate delta
+            delta = curr_file.line_coverage_percent - base_file.line_coverage_percent
+            if abs(delta) > 0.001:  # Only show if changed
+                impacted.append({
+                    "path": path,
+                    "coverage": curr_file.line_coverage_percent,
+                    "delta": delta,
+                    "is_new": False,
+                })
+        elif curr_file:
+            # New file
+            impacted.append({
+                "path": path,
+                "coverage": curr_file.line_coverage_percent,
+                "delta": None,
+                "is_new": True,
+            })
+        # Deleted files not shown
+    
+    # Sort by absolute delta (biggest changes first)
+    impacted.sort(key=lambda x: abs(x["delta"]) if x["delta"] is not None else 999, reverse=True)
+    
+    if not impacted:
+        console.print("[dim]No impacted files.[/]")
+        return
+    
+    # Print table
+    table = Table(show_header=True, box=None)
+    table.add_column("Impacted Files", style="cyan", max_width=50)
+    table.add_column("Coverage Δ", justify="right")
+    
+    for item in impacted[:limit]:
+        path = item["path"]
+        # Shorten path if too long
+        if len(path) > 50:
+            path = "..." + path[-47:]
+        
+        if item["is_new"]:
+            delta_str = f"{item['coverage']:.2f}% [blue](new)[/]"
+        else:
+            delta = item["delta"]
+            delta_style = "green" if delta >= 0 else "red"
+            delta_sign = "+" if delta >= 0 else ""
+            delta_str = f"{item['coverage']:.2f}% [{delta_style}]({delta_sign}{delta:.2f}%)[/]"
+        
+        table.add_row(path, delta_str)
+    
+    console.print(table)
+    
+    if len(impacted) > limit:
+        console.print(f"\n[dim]... and {len(impacted) - limit} more files with changes[/]")
 
 
 if __name__ == "__main__":

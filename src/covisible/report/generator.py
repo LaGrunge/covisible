@@ -152,22 +152,11 @@ class ReportGenerator:
                 for path, line, func in self.analyzer.get_critical_uncovered()[:20]
             ]
         else:
-            context["files"] = [
-                {
-                    "path": str(path),
-                    "rel_path": str(self._get_relative_path(path)),
-                    "name": path.name,
-                    "total_lines": file_cov.total_lines,
-                    "covered_lines": file_cov.covered_lines,
-                    "uncovered_lines": file_cov.uncovered_lines,
-                    "coverage_percent": file_cov.line_coverage_percent,
-                }
-                for path, file_cov in sorted(
-                    self.coverage.files.items(),
-                    key=lambda x: x[1].uncovered_lines,
-                    reverse=True,
-                )
-            ]
+            context["files"] = self._build_files_with_delta()
+        
+        # Build baseline lookup for JS
+        if self.baseline:
+            context["baseline_tree_data"] = self._build_baseline_tree_for_spa()
 
         # Add treemap data
         context["treemap_data"] = build_treemap_data(self.coverage, self.base_path)
@@ -326,6 +315,164 @@ class ReportGenerator:
 
         return tree
 
+    def _build_files_with_delta(self) -> list[dict[str, Any]]:
+        """Build files list with baseline delta information."""
+        files_list = []
+        
+        # Build baseline lookup by relative path
+        baseline_lookup: dict[str, Any] = {}
+        if self.baseline:
+            for path, file_cov in self.baseline.files.items():
+                rel_path = str(self._get_relative_path(path))
+                baseline_lookup[rel_path] = file_cov
+        
+        for path, file_cov in sorted(
+            self.coverage.files.items(),
+            key=lambda x: x[1].uncovered_lines,
+            reverse=True,
+        ):
+            rel_path = str(self._get_relative_path(path))
+            
+            file_data = {
+                "path": str(path),
+                "rel_path": rel_path,
+                "name": path.name,
+                "total_lines": file_cov.total_lines,
+                "covered_lines": file_cov.covered_lines,
+                "uncovered_lines": file_cov.uncovered_lines,
+                "coverage_percent": file_cov.line_coverage_percent,
+                "total_functions": file_cov.total_functions,
+                "covered_functions": file_cov.covered_functions,
+                "function_coverage_percent": file_cov.function_coverage_percent,
+            }
+            
+            # Add delta if baseline exists
+            if rel_path in baseline_lookup:
+                baseline_file = baseline_lookup[rel_path]
+                file_data["baseline_coverage_percent"] = baseline_file.line_coverage_percent
+                file_data["baseline_covered_lines"] = baseline_file.covered_lines
+                file_data["baseline_total_lines"] = baseline_file.total_lines
+                file_data["coverage_delta"] = file_cov.line_coverage_percent - baseline_file.line_coverage_percent
+                file_data["lines_delta"] = file_cov.covered_lines - baseline_file.covered_lines
+                file_data["is_new_file"] = False
+            elif self.baseline:
+                # File exists in current but not in baseline - it's new
+                file_data["is_new_file"] = True
+                file_data["coverage_delta"] = None
+                file_data["lines_delta"] = file_cov.covered_lines
+            else:
+                file_data["is_new_file"] = False
+                file_data["coverage_delta"] = None
+                file_data["lines_delta"] = None
+            
+            files_list.append(file_data)
+        
+        return files_list
+
+    def _build_baseline_tree_for_spa(self) -> dict[str, Any]:
+        """Build baseline tree structure for comparison in SPA."""
+        if not self.baseline:
+            return {}
+        
+        # Find common prefix from baseline
+        paths = list(self.baseline.files.keys())
+        if not paths:
+            return {}
+
+        first_parts = paths[0].parts
+        common_parts: list[str] = []
+        for i, part in enumerate(first_parts[:-1]):
+            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                common_parts.append(part)
+            else:
+                break
+        base_path = Path(*common_parts) if common_parts else None
+
+        # Build tree structure
+        tree: dict[str, dict[str, Any]] = {}
+
+        for file_path, file_cov in self.baseline.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+
+            # Create/update all parent directories
+            for i in range(len(parts)):
+                if i == len(parts) - 1:
+                    # File - add to parent's files list
+                    parent_path = "/".join(parts[:-1]) if len(parts) > 1 else ""
+                    if parent_path not in tree:
+                        tree[parent_path] = {
+                            "name": parts[-2] if len(parts) > 1 else "root",
+                            "files": {},
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+                    tree[parent_path]["files"][parts[-1]] = {
+                        "total_lines": file_cov.total_lines,
+                        "covered_lines": file_cov.covered_lines,
+                        "line_coverage_percent": file_cov.line_coverage_percent,
+                        "total_functions": file_cov.total_functions,
+                        "covered_functions": file_cov.covered_functions,
+                        "function_coverage_percent": file_cov.function_coverage_percent,
+                    }
+                else:
+                    # Directory
+                    dir_path = "/".join(parts[:i+1])
+                    parent_path = "/".join(parts[:i]) if i > 0 else ""
+
+                    if dir_path not in tree:
+                        tree[dir_path] = {
+                            "name": parts[i],
+                            "files": {},
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+
+                    if parent_path not in tree:
+                        tree[parent_path] = {
+                            "name": parts[i-1] if i > 0 else "root",
+                            "files": {},
+                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                        }
+
+        # Calculate stats for each directory
+        for file_path, file_cov in self.baseline.files.items():
+            if base_path:
+                try:
+                    rel_path = file_path.relative_to(base_path)
+                except ValueError:
+                    rel_path = file_path
+            else:
+                rel_path = file_path
+
+            parts = rel_path.parts
+            for i in range(len(parts)):
+                dir_path = "/".join(parts[:i]) if i > 0 else ""
+                if dir_path in tree:
+                    tree[dir_path]["stats"]["total_lines"] += file_cov.total_lines
+                    tree[dir_path]["stats"]["covered_lines"] += file_cov.covered_lines
+                    tree[dir_path]["stats"]["total_functions"] += file_cov.total_functions
+                    tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
+
+        # Calculate percentages
+        for path, node in tree.items():
+            stats = node["stats"]
+            if stats["total_lines"] > 0:
+                stats["line_coverage_percent"] = (stats["covered_lines"] / stats["total_lines"]) * 100
+            else:
+                stats["line_coverage_percent"] = 100.0
+            if stats["total_functions"] > 0:
+                stats["function_coverage_percent"] = (stats["covered_functions"] / stats["total_functions"]) * 100
+            else:
+                stats["function_coverage_percent"] = 100.0
+
+        return tree
+
     def _build_directory_tree_for_template(self) -> list[dict[str, Any]]:
         """Build directory tree data for lcov-style template."""
         from collections import defaultdict
@@ -440,6 +587,17 @@ class ReportGenerator:
 
         # Compute relative path from project root
         rel_path = self._get_relative_path(path)
+        
+        # Get baseline coverage for this file if available
+        baseline_file_cov = None
+        if self.baseline:
+            # Try to find matching file in baseline by relative path
+            rel_path_str = str(rel_path)
+            for baseline_path, baseline_cov in self.baseline.files.items():
+                baseline_rel = str(self._get_relative_path(baseline_path))
+                if baseline_rel == rel_path_str:
+                    baseline_file_cov = baseline_cov
+                    break
 
         context = {
             "title": f"{path.name} — {self.title}",
@@ -449,6 +607,7 @@ class ReportGenerator:
             "source_lines": source_lines,
             "added_lines": set(),
             "coverage": coverage_with_demangled,
+            "baseline_coverage": baseline_file_cov,
             "language": self._detect_language(path),
         }
 

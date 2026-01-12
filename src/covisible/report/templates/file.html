@@ -48,8 +48,21 @@
             </span>
             <span class="stat">
                 <strong>{{ coverage.line_coverage_percent|format_percent }}</strong> coverage
+                {% if baseline_coverage %}
+                {% set delta = coverage.line_coverage_percent - baseline_coverage.line_coverage_percent %}
+                <span class="stat-delta {% if delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                    {% if delta >= 0 %}▲{% else %}▼{% endif %}{{ "%.1f"|format(delta|abs) }}%
+                </span>
+                {% endif %}
             </span>
         </div>
+        {% if baseline_coverage %}
+        <div class="file-baseline-comparison">
+            <span class="baseline-label">vs Baseline:</span>
+            <span class="baseline-stat">{{ baseline_coverage.line_coverage_percent|format_percent }} coverage</span>
+            <span class="baseline-stat">{{ baseline_coverage.covered_lines }}/{{ baseline_coverage.total_lines }} lines</span>
+        </div>
+        {% endif %}
         {% endif %}
     </header>
 
@@ -97,13 +110,20 @@
                 {% set line_cov = coverage.lines.get(line_num) if coverage else none %}
                 {% set is_covered = line_cov.is_covered if line_cov else none %}
                 {% set exec_count = line_cov.count if line_cov else none %}
+                {% set baseline_line_cov = baseline_coverage.lines.get(line_num) if baseline_coverage else none %}
+                {% set baseline_is_covered = baseline_line_cov.is_covered if baseline_line_cov else none %}
+                {% set coverage_changed = baseline_coverage and is_covered is not none and baseline_is_covered is not none and is_covered != baseline_is_covered %}
+                {% set newly_covered = coverage_changed and is_covered == true %}
+                {% set newly_uncovered = coverage_changed and is_covered == false %}
 
                 <tr class="source-line
                     {% if is_added %}line-added{% endif %}
-                    {% if is_covered == true %}line-covered{% elif is_covered == false %}line-uncovered{% else %}line-neutral{% endif %}"
+                    {% if is_covered == true %}line-covered{% elif is_covered == false %}line-uncovered{% else %}line-neutral{% endif %}
+                    {% if newly_covered %}line-newly-covered line-coverage-changed{% elif newly_uncovered %}line-newly-uncovered line-coverage-changed{% endif %}"
                     data-line="{{ line_num }}"
                     data-added="{{ is_added|lower }}"
-                    data-covered="{{ is_covered|lower if is_covered is not none else 'na' }}">
+                    data-covered="{{ is_covered|lower if is_covered is not none else 'na' }}"
+                    data-baseline-covered="{{ baseline_is_covered|lower if baseline_is_covered is not none else 'na' }}">
 
                     <td class="line-number">{{ line_num }}</td>
                     <td class="line-status">
