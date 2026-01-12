@@ -196,11 +196,23 @@
                 });
             } else {
                 // Animated transition
-                // First, add any new paths that don't exist yet
+                // Create ALL paths for the new state that don't exist yet
+                // For zoom out, we need to add paths that weren't visible before
                 nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
                     const key = node.path || node.name;
                     if (!pathElements.has(key)) {
+                        // Calculate initial position (collapsed to center for zoom out)
+                        const inner = innerR + (depth - 1) * ringWidth + padRadius;
+                        const outer = innerR + depth * ringWidth - padRadius;
+                        const arcSpan = a1 - a0;
+                        const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
+                        const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
+                        
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        // Start with the target position but invisible
+                        if (paddedA1 > paddedA0) {
+                            path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
+                        }
                         path.setAttribute('fill', getCoverageColor(node.coverage_percent));
                         path.setAttribute('stroke', 'none');
                         path.style.cursor = 'pointer';
@@ -243,6 +255,13 @@
                             path.remove();
                             pathElements.delete(key);
                         }
+                    });
+                    
+                    // Ensure all visible paths have opacity 1
+                    nodes.slice(1).forEach(({ node }) => {
+                        const key = node.path || node.name;
+                        const path = pathElements.get(key);
+                        if (path) path.style.opacity = '1';
                     });
                 });
             }
