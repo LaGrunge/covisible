@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <link rel="icon" type="image/svg+xml" href="{% if file_path %}../{% endif %}assets/favicon.svg">
     <link rel="stylesheet" href="{% if file_path %}../{% endif %}assets/css/style.css">
     <script src="{% if file_path %}../{% endif %}assets/js/app.js" defer></script>
     {% block extra_head %}{% endblock %}

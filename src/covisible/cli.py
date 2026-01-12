@@ -80,8 +80,8 @@ def main() -> None:
 @click.option(
     "--title",
     type=str,
-    default="Coverage Report",
-    help="Report title",
+    default=None,
+    help="Report title (default: covisible:<project_name>)",
 )
 @click.option(
     "--blame/--no-blame",
@@ -101,6 +101,17 @@ def report(
 ) -> None:
     """Generate coverage report."""
     console.print("[bold blue]Covisible[/] — Generating coverage report...\n")
+
+    # Auto-generate title if not provided
+    if title is None:
+        if repo:
+            project_name = repo.resolve().name
+        else:
+            # Try to get project name from coverage file path or cwd
+            project_name = current.resolve().parent.name
+            if project_name in ("coverage", "build", "out", "output", "."):
+                project_name = Path.cwd().name
+        title = f"Covisible: {project_name}"
 
     current_cov = detect_and_parse(current)
     console.print(f"✓ Loaded current coverage: [green]{current}[/]")
