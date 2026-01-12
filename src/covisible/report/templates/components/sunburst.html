@@ -65,6 +65,85 @@
         const padAngle = 0.008;
         const padRadius = 3;
         
+        // Build path index for history navigation
+        const nodeIndex = new Map();
+        function indexNodes(node, path = '') {
+            const nodePath = path ? path : 'root';
+            nodeIndex.set(nodePath, node);
+            if (node.children) {
+                node.children.forEach(child => {
+                    indexNodes(child, child.path || child.name);
+                });
+            }
+        }
+        indexNodes(data);
+        
+        // Navigate to a specific path (for history)
+        function navigateToPath(pathStr, animate = false) {
+            if (!pathStr || pathStr === 'root') {
+                const prevNodes = animate ? collectNodes(currentRoot) : null;
+                zoomStack = [data];
+                currentRoot = data;
+                render(currentRoot, animate, prevNodes);
+                updateBreadcrumb();
+                return;
+            }
+            
+            // Build zoom stack by traversing path
+            const parts = pathStr.split('/');
+            let node = data;
+            const newStack = [data];
+            
+            for (let i = 0; i < parts.length; i++) {
+                const partPath = parts.slice(0, i + 1).join('/');
+                const found = node.children?.find(c => (c.path || c.name) === partPath);
+                if (found) {
+                    newStack.push(found);
+                    node = found;
+                } else {
+                    break;
+                }
+            }
+            
+            if (newStack.length > 1) {
+                const prevNodes = animate ? collectNodes(currentRoot) : null;
+                zoomStack = newStack;
+                currentRoot = newStack[newStack.length - 1];
+                render(currentRoot, animate, prevNodes);
+                updateBreadcrumb();
+            }
+        }
+        
+        // Get current path for history state
+        function getCurrentPath() {
+            if (zoomStack.length <= 1) return 'root';
+            return zoomStack[zoomStack.length - 1].path || zoomStack[zoomStack.length - 1].name;
+        }
+        
+        // Push state to history
+        function pushHistoryState() {
+            const path = getCurrentPath();
+            const url = new URL(window.location);
+            if (path === 'root') {
+                url.searchParams.delete('sunburst');
+            } else {
+                url.searchParams.set('sunburst', path);
+            }
+            history.pushState({ sunburstPath: path }, '', url);
+        }
+        
+        // Handle popstate (back/forward)
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.sunburstPath !== undefined) {
+                navigateToPath(e.state.sunburstPath, true);
+            } else {
+                // Check URL params as fallback
+                const url = new URL(window.location);
+                const path = url.searchParams.get('sunburst') || 'root';
+                navigateToPath(path, true);
+            }
+        });
+        
         // Collect nodes for a given root
         function collectNodes(rootNode) {
             const nodes = [];
@@ -193,6 +272,7 @@
                             currentRoot = node;
                             render(node, true, prevNodes);
                             updateBreadcrumb();
+                            pushHistoryState();
                         }
                     });
                     
@@ -244,6 +324,7 @@
                                 currentRoot = node;
                                 render(node, true, prevNodes);
                                 updateBreadcrumb();
+                                pushHistoryState();
                             }
                         });
                         
@@ -305,6 +386,7 @@
                     currentRoot = zoomStack[zoomStack.length - 1];
                     render(currentRoot, true, prevNodes);
                     updateBreadcrumb();
+                    pushHistoryState();
                 }
             });
             
@@ -382,12 +464,23 @@
                     currentRoot = zoomStack[zoomStack.length - 1];
                     render(currentRoot);
                     updateBreadcrumb();
+                    pushHistoryState();
                 });
             });
         }
         
-        render(data);
-        updateBreadcrumb();
+        // Check URL for initial state
+        const initialUrl = new URL(window.location);
+        const initialPath = initialUrl.searchParams.get('sunburst');
+        if (initialPath) {
+            navigateToPath(initialPath, false);
+        } else {
+            render(data);
+            updateBreadcrumb();
+        }
+        
+        // Replace initial state so back works correctly
+        history.replaceState({ sunburstPath: getCurrentPath() }, '', window.location);
     }
     
     function tryRenderSunburst() {
