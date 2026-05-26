@@ -140,6 +140,11 @@ class ReportGenerator:
                     "coverage_percent": (
                         pr_cov.coverage.line_coverage_percent if pr_cov.coverage else 0
                     ),
+                    # PR-diff mode has its own delta semantics (new lines, not
+                    # whole-file). Templates iterating files still reference
+                    # coverage_delta — provide it explicitly so Jinja sees
+                    # `is not none` False instead of crashing on abs(Undefined).
+                    "coverage_delta": None,
                 }
                 for path, pr_cov in sorted(
                     self.analyzer.files.items(),
