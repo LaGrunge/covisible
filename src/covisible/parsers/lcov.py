@@ -106,10 +106,13 @@ def parse_lcov_string(content: str) -> CoverageData:
                     )
 
         elif line.startswith("BRDA:"):
-            match = re.match(r"BRDA:(\d+),(\d+),(\d+),(-|\d+)", line)
+            # Block ids may carry an "e" prefix (lcov v2 marks exception
+            # branches as e.g. "BRDA:59,e0,1,-"); dropping those records
+            # makes branch totals disagree with `lcov --summary`.
+            match = re.match(r"BRDA:(\d+),(e?\d+),(\d+),(-|\d+)", line)
             if match and current_file:
                 line_num = int(match.group(1))
-                block_id = int(match.group(2))
+                block_id = match.group(2)
                 branch_id = int(match.group(3))
                 taken_str = match.group(4)
                 taken = 0 if taken_str == "-" else int(taken_str)
@@ -118,6 +121,7 @@ def parse_lcov_string(content: str) -> CoverageData:
                     line_number=line_num,
                     branch_id=branch_id,
                     count=taken,
+                    is_throw=block_id.startswith("e"),
                 )
 
                 if line_num in current_file.lines:
