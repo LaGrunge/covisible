@@ -43,8 +43,8 @@ dev = [
 covisible = "covisible.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/covisible/covisible"
-Repository = "https://github.com/covisible/covisible"
+Homepage = "https://github.com/LaGrunge/covisible"
+Repository = "https://github.com/LaGrunge/covisible"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/covisible"]

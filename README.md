@@ -22,7 +22,7 @@ pip install covisible
 Or install from source:
 
 ```bash
-git clone https://github.com/covisible/covisible
+git clone https://github.com/LaGrunge/covisible
 cd covisible
 pip install -e ".[dev]"
 ```
