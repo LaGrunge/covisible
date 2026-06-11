@@ -85,12 +85,19 @@ class ReportGenerator:
         # Generate directory tree pages
         self._generate_directory_pages()
 
+        # Full-file pages for every covered file: the SPA tree and the
+        # impacted-files table link to files/<mangled full path>.html for
+        # any file in the coverage set, so these pages must exist even in
+        # PR mode (where only diff files used to get pages — every other
+        # link 404'd).
+        for path, file_cov in self.coverage.files.items():
+            self._generate_file_page_simple(path, file_cov)
+
         if self.analyzer:
+            # Diff-focused pages for changed files, keyed by their
+            # diff-relative path (distinct from the full-path pages above).
             for path, pr_cov in self.analyzer.files.items():
                 self._generate_file_page(path, pr_cov)
-        else:
-            for path, file_cov in self.coverage.files.items():
-                self._generate_file_page_simple(path, file_cov)
 
     def _copy_assets(self) -> None:
         """Copy CSS and JS assets to output directory."""
@@ -209,33 +216,15 @@ class ReportGenerator:
 
     def _build_full_tree_for_spa(self) -> dict[str, Any]:
         """Build complete tree structure for SPA navigation."""
-        from collections import defaultdict
-
-        # Find common prefix
-        paths = list(self.coverage.files.keys())
-        if not paths:
+        if not self.coverage.files:
             return {}
 
-        first_parts = paths[0].parts
-        common_parts: list[str] = []
-        for i, part in enumerate(first_parts[:-1]):
-            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
-                common_parts.append(part)
-            else:
-                break
-        base_path = Path(*common_parts) if common_parts else None
-
-        # Build tree structure
+        # Build tree structure — keys are canonical relative paths so that
+        # impacted-module links (which use the same relativization) resolve.
         tree: dict[str, dict[str, Any]] = {}
 
         for file_path, file_cov in self.coverage.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             parts = rel_path.parts
 
@@ -288,13 +277,7 @@ class ReportGenerator:
 
         # Calculate stats for each directory
         for file_path, file_cov in self.coverage.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             parts = rel_path.parts
             for i in range(len(parts)):
@@ -384,21 +367,28 @@ class ReportGenerator:
         from collections import defaultdict
         
         def get_module(path: Path) -> tuple[str, str]:
-            """Extract module name and path from file path."""
+            """Extract module name and path from file path.
+
+            The returned path is a key into the SPA tree
+            (_build_full_tree_for_spa) — both sides use
+            _get_relative_path, so navigateToModule() resolves.
+            """
             rel_path = self._get_relative_path(path)
             parts = str(rel_path).split("/")
-            
+
             # Find src/ or similar and take next part
             for i, part in enumerate(parts):
                 if part in ("src", "lib", "app", "pkg"):
                     if i + 1 < len(parts) - 1:
                         module_path = "/".join(parts[:i+2])
                         return parts[i+1], module_path
-            
+
             # Fallback: first directory
             if len(parts) > 1:
                 return parts[0], parts[0]
-            return str(rel_path), str(rel_path)
+            # Top-level file — group under the tree root ("" navigates
+            # to the root listing), not a bogus per-file module.
+            return "(root)", ""
         
         # Aggregate by module
         current_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
@@ -491,34 +481,16 @@ class ReportGenerator:
 
     def _build_baseline_tree_for_spa(self) -> dict[str, Any]:
         """Build baseline tree structure for comparison in SPA."""
-        if not self.baseline:
-            return {}
-        
-        # Find common prefix from baseline
-        paths = list(self.baseline.files.keys())
-        if not paths:
+        if not self.baseline or not self.baseline.files:
             return {}
 
-        first_parts = paths[0].parts
-        common_parts: list[str] = []
-        for i, part in enumerate(first_parts[:-1]):
-            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
-                common_parts.append(part)
-            else:
-                break
-        base_path = Path(*common_parts) if common_parts else None
-
-        # Build tree structure
+        # Build tree structure.  Keys MUST use the same relativization as
+        # the current tree (_get_relative_path) — the JS looks up baseline
+        # stats by the current tree's path.
         tree: dict[str, dict[str, Any]] = {}
 
         for file_path, file_cov in self.baseline.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             parts = rel_path.parts
 
@@ -562,13 +534,7 @@ class ReportGenerator:
 
         # Calculate stats for each directory
         for file_path, file_cov in self.baseline.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             parts = rel_path.parts
             for i in range(len(parts)):
@@ -592,78 +558,6 @@ class ReportGenerator:
                 stats["function_coverage_percent"] = 100.0
 
         return tree
-
-    def _build_directory_tree_for_template(self) -> list[dict[str, Any]]:
-        """Build directory tree data for lcov-style template."""
-        from collections import defaultdict
-
-        # Find common prefix
-        paths = list(self.coverage.files.keys())
-        if not paths:
-            return []
-
-        first_parts = paths[0].parts
-        common_parts: list[str] = []
-        for i, part in enumerate(first_parts[:-1]):
-            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
-                common_parts.append(part)
-            else:
-                break
-        base_path = Path(*common_parts) if common_parts else None
-
-        # Group files by top-level directory
-        dir_stats: dict[str, dict[str, int]] = defaultdict(
-            lambda: {
-                "total_lines": 0,
-                "covered_lines": 0,
-                "total_functions": 0,
-                "covered_functions": 0,
-            }
-        )
-
-        for file_path, file_cov in self.coverage.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
-
-            parts = rel_path.parts
-            if len(parts) > 1:
-                top_dir = parts[0]
-            else:
-                top_dir = "."
-
-            dir_stats[top_dir]["total_lines"] += file_cov.total_lines
-            dir_stats[top_dir]["covered_lines"] += file_cov.covered_lines
-            dir_stats[top_dir]["total_functions"] += file_cov.total_functions
-            dir_stats[top_dir]["covered_functions"] += file_cov.covered_functions
-
-        # Convert to list
-        result = []
-        for name, stats in sorted(dir_stats.items()):
-            total_lines = stats["total_lines"]
-            covered_lines = stats["covered_lines"]
-            total_funcs = stats["total_functions"]
-            covered_funcs = stats["covered_functions"]
-
-            result.append({
-                "name": name,
-                "path": name,
-                "total_lines": total_lines,
-                "covered_lines": covered_lines,
-                "uncovered_lines": total_lines - covered_lines,
-                "line_coverage_percent": (covered_lines / total_lines * 100) if total_lines > 0 else 100.0,
-                "total_functions": total_funcs,
-                "covered_functions": covered_funcs,
-                "function_coverage_percent": (covered_funcs / total_funcs * 100) if total_funcs > 0 else 100.0,
-            })
-
-        # Sort by uncovered lines descending
-        result.sort(key=lambda x: x["uncovered_lines"], reverse=True)
-        return result
 
     def _generate_file_page(self, path: Path, pr_cov) -> None:
         """Generate individual file page with PR diff view."""
@@ -734,31 +628,48 @@ class ReportGenerator:
         html = template.render(**context)
         output_path.write_text(html)
 
+    @property
+    def _common_prefix(self) -> Path | None:
+        """Common directory prefix of all current-coverage file paths (cached)."""
+        if not hasattr(self, "_common_prefix_cache"):
+            self._common_prefix_cache = self._compute_common_prefix(
+                list(self.coverage.files.keys())
+            )
+        return self._common_prefix_cache
+
+    @staticmethod
+    def _compute_common_prefix(paths: list[Path]) -> Path | None:
+        if not paths:
+            return None
+        first_parts = paths[0].parts
+        common_parts: list[str] = []
+        for i, part in enumerate(first_parts[:-1]):
+            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
+                common_parts.append(part)
+            else:
+                break
+        return Path(*common_parts) if common_parts else None
+
     def _get_relative_path(self, path: Path) -> Path:
-        """Get path relative to project root (base_path or common prefix)."""
+        """Get path relative to project root (base_path or common prefix).
+
+        This is THE canonical relativization: tree keys in the SPA data,
+        directory pages, and impacted-module paths all must agree, or
+        navigation links point at nonexistent tree nodes.
+        """
         if self.base_path:
             try:
                 return path.relative_to(self.base_path)
             except ValueError:
                 pass
-        
-        # Try to find common prefix from all files
-        paths = list(self.coverage.files.keys())
-        if paths:
-            first_parts = paths[0].parts
-            common_parts: list[str] = []
-            for i, part in enumerate(first_parts[:-1]):
-                if all(len(p.parts) > i and p.parts[i] == part for p in paths):
-                    common_parts.append(part)
-                else:
-                    break
-            if common_parts:
-                base = Path(*common_parts)
-                try:
-                    return path.relative_to(base)
-                except ValueError:
-                    pass
-        
+
+        prefix = self._common_prefix
+        if prefix is not None:
+            try:
+                return path.relative_to(prefix)
+            except ValueError:
+                pass
+
         return path
 
     def _read_source_file(self, path: Path) -> list[str]:
@@ -939,29 +850,12 @@ class ReportGenerator:
         """Build a tree structure of directories with their stats."""
         tree: dict[str, dict[str, Any]] = {}
 
-        # Find common prefix
-        paths = list(self.coverage.files.keys())
-        if not paths:
+        if not self.coverage.files:
             return tree
-
-        first_parts = paths[0].parts
-        common_parts: list[str] = []
-        for i, part in enumerate(first_parts[:-1]):
-            if all(len(p.parts) > i and p.parts[i] == part for p in paths):
-                common_parts.append(part)
-            else:
-                break
-        base_path = Path(*common_parts) if common_parts else None
 
         # Process each file
         for file_path, file_cov in self.coverage.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             # Add all parent directories
             parts = rel_path.parts
@@ -1013,13 +907,7 @@ class ReportGenerator:
 
         # Calculate stats for each directory (bottom-up)
         for file_path, file_cov in self.coverage.files.items():
-            if base_path:
-                try:
-                    rel_path = file_path.relative_to(base_path)
-                except ValueError:
-                    rel_path = file_path
-            else:
-                rel_path = file_path
+            rel_path = self._get_relative_path(file_path)
 
             parts = rel_path.parts
             for i in range(len(parts)):
