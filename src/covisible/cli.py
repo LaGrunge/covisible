@@ -296,15 +296,44 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
     help="Baseline coverage file to compare against",
 )
 @click.option("--limit", "-n", type=int, default=10, help="Number of impacted files to show")
-def diff(current: Path, baseline: Path, limit: int) -> None:
+@click.option(
+    "--markdown",
+    "markdown_out",
+    type=click.Path(path_type=Path),
+    help="Also write a compact markdown brief (for CI PR comments) to this file",
+)
+@click.option("--base-label", type=str, default="Master", help="Baseline column label in --markdown")
+@click.option("--current-label", type=str, default="PR", help="Current column label in --markdown")
+def diff(
+    current: Path,
+    baseline: Path,
+    limit: int,
+    markdown_out: Path | None,
+    base_label: str,
+    current_label: str,
+) -> None:
     """Show coverage diff between current and baseline (CodeCov style).
-    
+
     Example: covisible diff coverage_new.lcov -b coverage.lcov
     """
     current_cov = detect_and_parse(current)
     baseline_cov = detect_and_parse(baseline)
-    
+
     _print_coverage_diff(current_cov, baseline_cov, limit)
+
+    if markdown_out:
+        from covisible.report.markdown import render_diff_markdown
+
+        markdown_out.parent.mkdir(parents=True, exist_ok=True)
+        markdown_out.write_text(
+            render_diff_markdown(
+                current_cov,
+                baseline_cov,
+                base_label=base_label,
+                current_label=current_label,
+            )
+        )
+        console.print(f"✓ Markdown brief written: [green]{markdown_out}[/]")
 
 
 def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
@@ -360,10 +389,15 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
         f"{_format_delta(hits_delta, positive_good=True)}"
     )
     
-    misses_style = "red" if misses_delta > 0 else "green" if misses_delta < 0 else ""
-    misses_prefix = "-" if misses_delta > 0 else "+" if misses_delta < 0 else " "
+    if misses_delta != 0:
+        misses_style = "red" if misses_delta > 0 else "green"
+        misses_prefix = "-" if misses_delta > 0 else "+"
+        misses_lead = f"[{misses_style}]{misses_prefix}[/]"
+    else:
+        # No empty-style tag: rich raises MarkupError on "[]...[/]".
+        misses_lead = " "
     console.print(
-        f"[{misses_style}]{misses_prefix}[/] Misses       {baseline.uncovered_lines:>6}    {current.uncovered_lines:>6}   "
+        f"{misses_lead} Misses       {baseline.uncovered_lines:>6}    {current.uncovered_lines:>6}   "
         f"{_format_delta(misses_delta, positive_good=False)}"
     )
     
