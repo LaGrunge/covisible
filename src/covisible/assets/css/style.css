@@ -1428,34 +1428,53 @@ h3 {
 }
 
 /* ===== Sunburst Chart ===== */
-/* ===== Modules tab: directory browser, with the sunburst chart below ===== */
+/* ===== Modules tab: directory browser + sunburst chart =====
+   Row when the table's columns fit alongside the chart; the chart wraps
+   below (full width) when there isn't room — flex-wrap handles the switch. */
 .modules-layout {
     display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
+    flex-wrap: wrap;
+    gap: var(--spacing-lg);
+    align-items: flex-start;
 }
 
+/* Reserve enough width for all table columns + their text; if the chart
+   can't fit beside this, it wraps to the next line. */
 .modules-browser {
-    min-width: 0;
+    flex: 1 1 620px;
+    min-width: 620px;
 }
 
 .modules-chart {
-    width: 100%;
-    max-width: 880px;
+    flex: 1 1 360px;
+    min-width: 300px;
+    max-width: 520px;
     margin: 0 auto;
 }
 
-/* Chart + hover-info side by side, so the info panel filling in on hover
-   never pushes the chart around (no layout jump). */
+/* The chart's <section> carries a big top margin for its legacy standalone
+   use; kill it here. */
+.modules-chart .sunburst-section {
+    margin-top: 0;
+}
+
+/* Subtle, theme-aware ring instead of a hard white 2px stroke. */
+.sunburst-center-circle {
+    stroke: var(--border-color, rgba(255, 255, 255, 0.1));
+    stroke-width: 1;
+}
+
+/* Chart with the hover-info card beneath it; the card keeps a reserved
+   min-height so filling it in on hover never shifts the layout. */
 .sunburst-body {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-sm);
 }
 
 .sunburst-center-wrapper {
-    flex: 0 1 600px;
+    width: 100%;
     min-width: 0;
 }
 
@@ -1467,12 +1486,9 @@ h3 {
     margin: 0 auto;
 }
 
-/* Fixed-size side card: reserved width + min-height keep the box stable
-   whether or not a segment is hovered. */
 .sunburst-info-bar {
-    flex: 0 0 240px;
-    width: 240px;
-    min-height: 150px;
+    width: 100%;
+    min-height: 92px;
     padding: var(--spacing-md);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
@@ -1502,17 +1518,6 @@ h3 {
 .sunburst-info-hint {
     font-size: var(--font-size-sm);
     color: var(--text-muted);
-}
-
-@media (max-width: 720px) {
-    .sunburst-body {
-        flex-direction: column;
-    }
-    .sunburst-info-bar {
-        flex: 0 0 auto;
-        width: 100%;
-        max-width: 360px;
-    }
 }
 
 .sunburst-section {
