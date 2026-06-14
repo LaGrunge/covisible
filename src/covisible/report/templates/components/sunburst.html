@@ -1,6 +1,5 @@
 <!-- Sunburst Chart Component -->
 <section class="sunburst-section">
-    <div class="sunburst-breadcrumb" id="sunburst-breadcrumb"></div>
     <div class="sunburst-body">
         <div class="sunburst-center-wrapper">
             <div class="sunburst-chart-fixed" id="sunburst-chart"></div>
@@ -21,16 +20,14 @@
     const sunburstData = {{ treemap_data | tojson }};
     let sunburstRendered = false;
     
-    // Gradient color based on coverage percentage (0% = red, 100% = green)
+    // Tiered color matching the module table's coverage classes, so a file
+    // reads the same in both places (>=80 green, >=50 amber, else red).
     function getCoverageColor(pct, alpha = 0.85) {
-        // Clamp percentage to 0-100
-        const p = Math.max(0, Math.min(100, pct)) / 100;
-        // Interpolate from red (0, 100, 60) to green (120, 100, 45) in HSL
-        // Red: hsl(0, 100%, 60%) -> Green: hsl(120, 100%, 40%)
-        const hue = p * 120; // 0 (red) to 120 (green)
-        const saturation = 75 + p * 10; // 75% to 85%
-        const lightness = 50 - p * 10; // 50% to 40% (darker green for better contrast)
-        return `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+        let rgb;
+        if (pct >= 80) rgb = '34, 197, 94';        // --color-covered  #22c55e
+        else if (pct >= 50) rgb = '245, 158, 11';  // --color-warning  #f59e0b
+        else rgb = '239, 68, 68';                  // --color-uncovered #ef4444
+        return `rgba(${rgb}, ${alpha})`;
     }
     
     function renderSunburst(data, containerId) {
@@ -87,7 +84,6 @@
                 zoomStack = [data];
                 currentRoot = data;
                 render(currentRoot, animate, prevNodes);
-                updateBreadcrumb();
                 return;
             }
             
@@ -112,7 +108,6 @@
                 zoomStack = newStack;
                 currentRoot = newStack[newStack.length - 1];
                 render(currentRoot, animate, prevNodes);
-                updateBreadcrumb();
             }
         }
         
@@ -396,42 +391,9 @@
             info.querySelector('.sunburst-info-hint').textContent = '';
         }
         
-        function updateBreadcrumb() {
-            const bc = document.getElementById('sunburst-breadcrumb');
-            if (!bc) return;
-            
-            // Show <whole project> for root level
-            if (zoomStack.length <= 1) {
-                bc.innerHTML = '<span class="bc-current">&lt;whole project&gt;</span>';
-                return;
-            }
-            
-            // Build breadcrumb: <whole project> / dir1 / dir2 / ...
-            let parts = ['<span class="bc-link" data-idx="0">&lt;whole project&gt;</span>'];
-            zoomStack.slice(1).forEach((n, i) => {
-                const name = n.name;
-                const realIdx = i + 1;
-                if (realIdx === zoomStack.length - 1) {
-                    parts.push(`<span class="bc-current">${name}</span>`);
-                } else {
-                    parts.push(`<span class="bc-link" data-idx="${realIdx}">${name}</span>`);
-                }
-            });
-            bc.innerHTML = parts.join(' / ');
-            
-            bc.querySelectorAll('.bc-link').forEach(el => {
-                el.addEventListener('click', () => {
-                    const idx = parseInt(el.dataset.idx);
-                    const target = zoomStack[idx];
-                    emitNavigate(idx === 0 ? 'root' : (target.path || target.name));
-                });
-            });
-        }
-        
         // Initial render: whole project, then let the controller pull us to
         // whatever directory the table currently shows.
         render(data);
-        updateBreadcrumb();
 
         // Exposed so the modules controller can focus the chart on a directory.
         window.sunburstFocus = function(path, animate = true) {
