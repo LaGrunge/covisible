@@ -8,9 +8,10 @@ version = "0.1.0"
 description = "PR-first code coverage report generator with modern UI"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [
-    { name = "Covisible Authors" }
+    { name = "LaGrunge", email = "leontodys@gmail.com" }
 ]
 keywords = ["coverage", "gcov", "testing", "code-quality", "diff"]
 classifiers = [
@@ -48,6 +49,15 @@ Repository = "https://github.com/LaGrunge/covisible"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/covisible"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/covisible",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
 
 [tool.ruff]
 target-version = "py312"
