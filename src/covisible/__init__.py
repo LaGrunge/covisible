@@ -1,3 +1,3 @@
 """Covisible — PR-first code coverage report generator."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
