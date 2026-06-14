@@ -55,7 +55,10 @@
         const size = 650;
         const radius = size / 2;
         const innerR = radius * 0.18;
-        const ringWidth = (radius - innerR) / 5;
+        // Recomputed per render() to fill the disc with however many ring
+        // levels the current view actually has (a fixed /5 left a big empty
+        // outer band for shallow trees).
+        let ringWidth = (radius - innerR) / 5;
         
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('width', size);
@@ -153,8 +156,9 @@
         // Interpolate between two values
         function lerp(a, b, t) { return a + (b - a) * t; }
         
-        // Animate transition between states
-        function animateTransition(fromNodes, toNodes, onComplete) {
+        // Animate transition between states. fromRW/toRW are the ring widths
+        // of the two views, interpolated so thickness changes smoothly.
+        function animateTransition(fromNodes, toNodes, fromRW, toRW, onComplete) {
             const startTime = performance.now();
             
             // Build lookup maps
@@ -177,9 +181,10 @@
                         const a0 = lerp(from.a0, to.a0, easeT);
                         const a1 = lerp(from.a1, to.a1, easeT);
                         const depth = lerp(from.depth, to.depth, easeT);
-                        
-                        const inner = innerR + (depth - 1) * ringWidth + padRadius;
-                        const outer = innerR + depth * ringWidth - padRadius;
+                        const rw = lerp(fromRW, toRW, easeT);
+
+                        const inner = innerR + (depth - 1) * rw + padRadius;
+                        const outer = innerR + depth * rw - padRadius;
                         
                         const arcSpan = a1 - a0;
                         const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
@@ -229,7 +234,12 @@
 
         function render(rootNode, animate = false, prevNodes = null) {
             const nodes = collectNodes(rootNode);
-            
+
+            // Fill the disc: size rings to the deepest level actually shown.
+            const prevRingWidth = ringWidth;
+            const maxDepth = nodes.reduce((m, n) => Math.max(m, n.depth), 1);
+            ringWidth = (radius - innerR) / maxDepth;
+
             if (!animate || !prevNodes) {
                 // Initial render or no animation
                 g.innerHTML = '';
@@ -307,7 +317,7 @@
                     }
                 });
                 
-                animateTransition(prevNodes, nodes, () => {
+                animateTransition(prevNodes, nodes, prevRingWidth, ringWidth, () => {
                     // Clean up paths that are no longer visible
                     const nodeKeys = new Set(nodes.map(n => n.node.path || n.node.name));
                     pathElements.forEach((path, key) => {
