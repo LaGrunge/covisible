@@ -609,6 +609,10 @@
                     .filter(k => k && !k.includes('/'))
                     .map(k => ({ ...coverageData[k], path: k, isDir: true }));
             }
+            // Files that live directly at the repo root, not under any dir.
+            if (coverageData[''] && coverageData[''].files) {
+                coverageData[''].files.forEach(f => files.push({ ...f, isDir: false }));
+            }
         } else if (coverageData[path]) {
             const node = coverageData[path];
             if (node.subdirs) {
