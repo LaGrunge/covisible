@@ -818,6 +818,17 @@ h3 {
     margin-bottom: var(--spacing-md);
 }
 
+.source-missing-note {
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md, 6px);
+    border: 1px solid var(--warning, #d97706);
+    background: color-mix(in srgb, var(--warning, #d97706) 12%, transparent);
+    color: var(--text-secondary, var(--text-muted));
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
 .file-stats {
     display: flex;
     gap: var(--spacing-lg);
