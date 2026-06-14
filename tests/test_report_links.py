@@ -157,6 +157,30 @@ class TestAnalyzerModePages:
         assert_links_resolve(tmp_path / "report")
 
 
+class TestSourceMissingFallback:
+    """When source files aren't on disk, file pages must still show coverage."""
+
+    def test_file_page_renders_coverage_without_source(self, tmp_path):
+        # CURRENT_LCOV paths (/repo/...) do not exist on disk, so source
+        # reading yields nothing — the page must fall back to coverage rows.
+        current = parse_lcov_string(CURRENT_LCOV)
+        gen = ReportGenerator(coverage=current, output_dir=tmp_path / "report")
+        gen.generate_html()
+
+        page = (
+            tmp_path / "report" / "files" / "_repo_storage_orthus_core_key.cpp.html"
+        ).read_text()
+
+        # The "source not found" note is shown…
+        assert "source-missing-note" in page
+        # …and a row is emitted for each executable line (1, 2, 3).
+        for line_num in (1, 2, 3):
+            assert f'data-line="{line_num}"' in page
+        # Covered vs uncovered status reflects the hit counts (1:1, 2:0, 3:1).
+        assert page.count("status-covered-dim") == 2
+        assert page.count("status-uncovered-dim") == 1
+
+
 class TestMarkdownBrief:
     def test_brief_has_deltas(self):
         current = parse_lcov_string(CURRENT_LCOV)
