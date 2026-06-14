@@ -86,7 +86,7 @@ class TreemapBuilder:
     def _add_file(self, file_path: Path, total_lines: int, covered_lines: int) -> None:
         """Add a file to the treemap."""
         base_path = self.base_path or self._find_common_prefix()
-        
+
         if base_path:
             try:
                 rel_path = file_path.relative_to(base_path)
@@ -143,9 +143,13 @@ class TreemapBuilder:
         self, node: TreemapNode, result: list[dict[str, Any]], min_lines: int
     ) -> None:
         """Recursively collect directory stats."""
-        if not node.is_file and node.children and node.total_lines >= min_lines:
-            if node.name != "root":
-                result.append(node.to_dict())
+        if (
+            not node.is_file
+            and node.children
+            and node.total_lines >= min_lines
+            and node.name != "root"
+        ):
+            result.append(node.to_dict())
 
         for child in node.children.values():
             self._collect_directories(child, result, min_lines)

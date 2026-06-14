@@ -1,6 +1,5 @@
 """Tests for coverage parsers."""
 
-import pytest
 
 from covisible.parsers.gcov_json import parse_gcov_json_string
 from covisible.parsers.lcov import parse_lcov_string
@@ -87,6 +86,30 @@ end_of_record
         assert cov.total_lines == 3
         assert cov.covered_lines == 2
         assert cov.uncovered_lines == 1
+
+    def test_parse_function_v1_start_line(self):
+        # Legacy "FN:line,name" form must still record the start line.
+        cov = parse_lcov_string(
+            "SF:/p/a.cpp\nFN:10,foo\nFNDA:5,foo\nDA:10,5\nend_of_record\n"
+        )
+        func = list(cov.files.values())[0].functions[0]
+        assert func.name == "foo"
+        assert func.start_line == 10
+        assert func.execution_count == 5
+
+    def test_parse_function_v2_start_and_end_line(self):
+        # lcov v2/v3 "FN:start,end,name": both lines must be captured and the
+        # name must match the FNDA record (regression: name used to absorb the
+        # end-line field, leaving start_line stuck at 0).
+        cov = parse_lcov_string(
+            "SF:/p/a.cpp\nFN:1004,1019,_ZN6orthus3barEv\n"
+            "FNDA:7,_ZN6orthus3barEv\nDA:1004,7\nend_of_record\n"
+        )
+        func = list(cov.files.values())[0].functions[0]
+        assert func.name == "_ZN6orthus3barEv"
+        assert func.start_line == 1004
+        assert func.end_line == 1019
+        assert func.execution_count == 7
 
     def test_parse_with_branches(self):
         lcov_content = """TN:

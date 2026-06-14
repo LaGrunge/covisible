@@ -83,7 +83,7 @@ class ModuleGrouper:
 
     def _find_common_prefix(self) -> Path | None:
         """Find common path prefix for all files."""
-        paths = [p for p in self.coverage.files.keys()]
+        paths = list(self.coverage.files.keys())
         if not paths:
             return None
 

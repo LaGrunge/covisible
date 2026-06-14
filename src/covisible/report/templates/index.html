@@ -51,10 +51,6 @@
             <span class="tab-icon">📄</span>
             <span class="tab-text">All Files</span>
         </button>
-        <button class="tab-btn" data-tab="sunburst">
-            <span class="tab-icon">🎯</span>
-            <span class="tab-text">Sunburst</span>
-        </button>
     </nav>
 
     <!-- Tab: Comparison (if baseline) -->
@@ -249,6 +245,8 @@
 
     <!-- Tab: Modules -->
     <div class="tab-content{% if not baseline %} active{% endif %}" id="tab-modules">
+      <div class="modules-layout">
+        <div class="modules-browser">
         <div class="files-table-container">
             <table class="files-table directory-table" id="browser-table">
                 <thead id="browser-thead">
@@ -271,6 +269,11 @@
                 </tbody>
             </table>
         </div>
+        </div>
+        <div class="modules-chart">
+            {% include "components/sunburst.html" %}
+        </div>
+      </div>
     </div>
 
     <!-- Tab: All Files -->
@@ -278,10 +281,15 @@
         <div class="files-toolbar">
             <input type="text" id="file-search" class="search-input" placeholder="🔍 Search files...">
             <div class="sort-buttons">
-                <button class="sort-btn active" data-sort="uncovered">Uncovered ↓</button>
-                <button class="sort-btn" data-sort="coverage">Coverage ↑</button>
-                {% if baseline %}<button class="sort-btn" data-sort="delta">Delta ↓</button>{% endif %}
-                <button class="sort-btn" data-sort="name">Name A-Z</button>
+                <span class="sort-label">Sort by:</span>
+                <button class="sort-btn active" data-sort="uncovered"
+                        title="Most uncovered lines first — by absolute count of missing lines, regardless of file size">Uncovered lines ↓</button>
+                <button class="sort-btn" data-sort="coverage"
+                        title="Lowest coverage first — by percentage of lines covered, regardless of file size">Coverage&nbsp;% ↑</button>
+                {% if baseline %}<button class="sort-btn" data-sort="delta"
+                        title="Biggest coverage change vs baseline first">Δ vs baseline ↓</button>{% endif %}
+                <button class="sort-btn" data-sort="name"
+                        title="Alphabetical by file path">Name A–Z</button>
             </div>
         </div>
         <div class="files-list" id="files-list">
@@ -318,11 +326,6 @@
         </div>
     </div>
 
-    <!-- Tab: Sunburst -->
-    <div class="tab-content tab-sunburst-centered" id="tab-sunburst">
-        {% include "components/sunburst.html" %}
-    </div>
-
     <!-- Embedded data for JS navigation -->
     <script>
     const coverageData = {{ full_tree_data | tojson }};
@@ -356,7 +359,23 @@
     const baselineRootStats = null;
     {% endif %}
     let currentPath = '';
-    
+
+    // ── Modules ⇄ Sunburst sync ───────────────────────────────────────────
+    // navigateTo() is the single source of truth for "which directory are we
+    // looking at". It drives both the table and the sunburst. _syncingNav
+    // guards against the sunburst's own click handlers bouncing back into a
+    // second navigation while we're already navigating.
+    let _syncingNav = false;
+
+    // The sunburst calls this when the user zooms via a slice / center / crumb.
+    window.onSunburstNavigate = function(sbPath) {
+        if (_syncingNav) return;
+        navigateTo((!sbPath || sbPath === 'root') ? '' : sbPath);
+    };
+
+    // The sunburst reads this on first render to align with the table.
+    window.getCurrentModulePath = function() { return currentPath; };
+
     function formatDelta(delta, isPercent = false) {
         if (delta === null || delta === undefined) return '';
         const val = isPercent ? delta.toFixed(1) + '%' : delta;
@@ -530,7 +549,12 @@
         currentPath = path;
         updateStats(path);
         updateTable(path);
-        
+
+        // Keep the sunburst focused on the same directory (animated).
+        _syncingNav = true;
+        if (window.sunburstFocus) window.sunburstFocus(path);
+        _syncingNav = false;
+
         // Update browser history
         if (pushState) {
             const url = path ? '#' + path : '#';

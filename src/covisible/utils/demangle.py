@@ -51,7 +51,7 @@ def demangle_cpp_batch(mangled_names: list[str]) -> dict[str, str]:
 
     # Filter to only mangled names
     to_demangle = [n for n in mangled_names if n.startswith("_Z") or n.startswith("__Z")]
-    
+
     if not to_demangle:
         return {n: n for n in mangled_names}
 
@@ -67,7 +67,7 @@ def demangle_cpp_batch(mangled_names: list[str]) -> dict[str, str]:
         )
         if proc.returncode == 0:
             demangled = proc.stdout.strip().split("\n")
-            for mangled, dem in zip(to_demangle, demangled):
+            for mangled, dem in zip(to_demangle, demangled, strict=False):
                 if dem:
                     result[mangled] = dem
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -97,7 +97,9 @@ def simplify_cpp_signature(demangled: str, max_length: int = 80) -> str:
     simplified = simplified.replace("std::", "")
 
     # Simplify common types
-    simplified = simplified.replace("basic_string<char, char_traits<char>, allocator<char>>", "string")
+    simplified = simplified.replace(
+        "basic_string<char, char_traits<char>, allocator<char>>", "string"
+    )
     simplified = simplified.replace("basic_string<char>", "string")
 
     # Remove allocator stuff
