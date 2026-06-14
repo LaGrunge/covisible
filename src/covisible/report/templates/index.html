@@ -281,10 +281,15 @@
         <div class="files-toolbar">
             <input type="text" id="file-search" class="search-input" placeholder="🔍 Search files...">
             <div class="sort-buttons">
-                <button class="sort-btn active" data-sort="uncovered">Uncovered ↓</button>
-                <button class="sort-btn" data-sort="coverage">Coverage ↑</button>
-                {% if baseline %}<button class="sort-btn" data-sort="delta">Delta ↓</button>{% endif %}
-                <button class="sort-btn" data-sort="name">Name A-Z</button>
+                <span class="sort-label">Sort by:</span>
+                <button class="sort-btn active" data-sort="uncovered"
+                        title="Most uncovered lines first — by absolute count of missing lines, regardless of file size">Uncovered lines ↓</button>
+                <button class="sort-btn" data-sort="coverage"
+                        title="Lowest coverage first — by percentage of lines covered, regardless of file size">Coverage&nbsp;% ↑</button>
+                {% if baseline %}<button class="sort-btn" data-sort="delta"
+                        title="Biggest coverage change vs baseline first">Δ vs baseline ↓</button>{% endif %}
+                <button class="sort-btn" data-sort="name"
+                        title="Alphabetical by file path">Name A–Z</button>
             </div>
         </div>
         <div class="files-list" id="files-list">
