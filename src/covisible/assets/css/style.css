@@ -626,6 +626,14 @@ h3 {
 .sort-buttons {
     display: flex;
     gap: var(--spacing-xs);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.sort-label {
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    margin-right: var(--spacing-xs);
 }
 
 .sort-btn {
