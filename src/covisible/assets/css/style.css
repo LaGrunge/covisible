@@ -1432,7 +1432,7 @@ h3 {
 .modules-layout {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xl);
+    gap: var(--spacing-md);
 }
 
 .modules-browser {
@@ -1441,8 +1441,14 @@ h3 {
 
 .modules-chart {
     width: 100%;
-    max-width: 880px;
+    max-width: 1040px;
     margin: 0 auto;
+}
+
+/* Subtle, theme-aware ring instead of a hard white 2px stroke. */
+.sunburst-center-circle {
+    stroke: var(--border-color, rgba(255, 255, 255, 0.1));
+    stroke-width: 1;
 }
 
 /* Chart + hover-info side by side, so the info panel filling in on hover
@@ -1455,7 +1461,7 @@ h3 {
 }
 
 .sunburst-center-wrapper {
-    flex: 0 1 600px;
+    flex: 0 1 740px;
     min-width: 0;
 }
 

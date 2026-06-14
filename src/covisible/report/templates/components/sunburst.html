@@ -337,8 +337,7 @@
             const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             center.setAttribute('r', innerR - 3);
             center.setAttribute('fill', getCoverageColor(rootNode.coverage_percent, 0.9));
-            center.setAttribute('stroke', 'rgba(255, 255, 255, 0.3)');
-            center.setAttribute('stroke-width', '2');
+            center.setAttribute('class', 'sunburst-center-circle');
             centerG.appendChild(center);
             
             // Center text - just percentage
