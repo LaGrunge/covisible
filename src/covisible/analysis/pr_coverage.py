@@ -55,9 +55,8 @@ class FilePRCoverage:
             return 0
         count = 0
         for line_num in self.added_lines:
-            if line_num in self.coverage.lines:
-                if self.coverage.lines[line_num].is_covered:
-                    count += 1
+            if line_num in self.coverage.lines and self.coverage.lines[line_num].is_covered:
+                count += 1
         return count
 
     @property
@@ -78,9 +77,7 @@ class FilePRCoverage:
             return sorted(self.added_lines)
         result = []
         for line_num in self.added_lines:
-            if line_num not in self.coverage.lines:
-                result.append(line_num)
-            elif not self.coverage.lines[line_num].is_covered:
+            if line_num not in self.coverage.lines or not self.coverage.lines[line_num].is_covered:
                 result.append(line_num)
         return sorted(result)
 

@@ -1,6 +1,5 @@
 """Tests for diff parsing."""
 
-import pytest
 
 from covisible.analysis.diff import DiffAnalyzer
 
