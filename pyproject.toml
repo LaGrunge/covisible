@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "covisible"
-version = "0.1.0"
+dynamic = ["version"]
 description = "PR-first code coverage report generator with modern UI"
 readme = "README.md"
 license = "MIT"
@@ -46,6 +46,9 @@ covisible = "covisible.cli:main"
 [project.urls]
 Homepage = "https://github.com/LaGrunge/covisible"
 Repository = "https://github.com/LaGrunge/covisible"
+
+[tool.hatch.version]
+path = "src/covisible/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/covisible"]
