@@ -54,7 +54,8 @@ def parse_lcov_string(content: str) -> CoverageData:
     """
     coverage = CoverageData()
     current_file: FileCoverage | None = None
-    function_lines: dict[str, int] = {}
+    # func_name -> (start_line, end_line); end_line is 0 when unknown (lcov v1).
+    function_lines: dict[str, tuple[int, int]] = {}
 
     for line in content.splitlines():
         line = line.strip()
@@ -71,23 +72,31 @@ def parse_lcov_string(content: str) -> CoverageData:
             function_lines = {}
 
         elif line.startswith("FN:"):
-            match = re.match(r"FN:(\d+),(.+)", line)
-            if match and current_file:
-                line_num = int(match.group(1))
-                func_name = match.group(2)
-                function_lines[func_name] = line_num
+            # lcov v2/v3 emits "FN:start,end,name"; the older v1 form is
+            # "FN:line,name". Mangled symbol names never contain commas, so
+            # the leading numeric fields disambiguate the two cleanly.
+            match_v2 = re.match(r"FN:(\d+),(\d+),(.+)", line)
+            if match_v2 and current_file:
+                function_lines[match_v2.group(3)] = (
+                    int(match_v2.group(1)),
+                    int(match_v2.group(2)),
+                )
+            else:
+                match = re.match(r"FN:(\d+),(.+)", line)
+                if match and current_file:
+                    function_lines[match.group(2)] = (int(match.group(1)), 0)
 
         elif line.startswith("FNDA:"):
             match = re.match(r"FNDA:(\d+),(.+)", line)
             if match and current_file:
                 exec_count = int(match.group(1))
                 func_name = match.group(2)
-                start_line = function_lines.get(func_name, 0)
+                start_line, end_line = function_lines.get(func_name, (0, 0))
                 func = FunctionCoverage(
                     name=func_name,
                     demangled_name=None,
                     start_line=start_line,
-                    end_line=0,
+                    end_line=end_line,
                     execution_count=exec_count,
                 )
                 current_file.functions.append(func)
