@@ -251,12 +251,12 @@
             <table class="files-table directory-table" id="browser-table">
                 <thead id="browser-thead">
                     <tr>
-                        <th class="sortable-header" data-sort="name">Name <span class="sort-indicator">↑</span></th>
+                        <th></th>
                         <th colspan="3" class="text-center">Line Coverage</th>
                         <th colspan="3" class="text-center">Function Coverage</th>
                     </tr>
                     <tr class="subheader">
-                        <th></th>
+                        <th class="sortable-header" data-sort="name">Name <span class="sort-indicator">↑</span></th>
                         <th class="text-center sortable-header" data-sort="line-rate">Rate</th>
                         <th class="text-center sortable-header" data-sort="line-total">Total</th>
                         <th class="text-center sortable-header" data-sort="line-hit">Hit</th>
@@ -811,12 +811,35 @@
         });
     });
 
+    // When the project's real content sits below a chain of single-child
+    // directories (e.g. only `storage/` at the root, then only `orthus/`
+    // inside that, …), opening at the bare root shows a tedious run of
+    // one-row listings. Descend from the root through those single-child
+    // links and start at the first level that actually branches — the
+    // first directory holding more than one element (subdir or file).
+    function findInitialPath() {
+        let path = '';
+        let node = coverageData[''] || null;
+        for (let depth = 0; node && depth < 64; depth++) {
+            const subdirs = node.subdirs || [];
+            const files = node.files || [];
+            // Collapse only a lone subdirectory with nothing beside it.
+            if (subdirs.length !== 1 || files.length !== 0) break;
+            const next = path ? path + '/' + subdirs[0] : subdirs[0];
+            if (!coverageData[next]) break;
+            path = next;
+            node = coverageData[next];
+        }
+        return path;
+    }
+
     // Initialize from URL hash or default
     document.addEventListener('DOMContentLoaded', function() {
         const hash = window.location.hash.slice(1); // Remove #
-        navigateTo(hash || '', false);
+        const initial = hash || findInitialPath();
+        navigateTo(initial, false);
         // Replace initial state
-        history.replaceState({ path: hash || '' }, '', window.location.href);
+        history.replaceState({ path: initial }, '', window.location.href);
     });
     </script>
 </div>
