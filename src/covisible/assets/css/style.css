@@ -1433,16 +1433,78 @@ h3 {
 
 .modules-chart {
     width: 100%;
-    max-width: 600px;
+    max-width: 880px;
     margin: 0 auto;
 }
 
+/* Chart + hover-info side by side, so the info panel filling in on hover
+   never pushes the chart around (no layout jump). */
+.sunburst-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+}
+
+.sunburst-center-wrapper {
+    flex: 0 1 600px;
+    min-width: 0;
+}
+
 /* The chart SVG ships with fixed width/height attrs + a viewBox; let it
-   scale to the column width while keeping its square ratio. */
+   scale to its column while keeping its square ratio. */
 .modules-chart .sunburst-chart-fixed svg {
     width: 100%;
     height: auto;
     margin: 0 auto;
+}
+
+/* Fixed-size side card: reserved width + min-height keep the box stable
+   whether or not a segment is hovered. */
+.sunburst-info-bar {
+    flex: 0 0 240px;
+    width: 240px;
+    min-height: 150px;
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 8px);
+    text-align: left;
+}
+
+.sunburst-info-path {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary, var(--text-muted));
+    word-break: break-all;
+    margin-bottom: var(--spacing-sm);
+}
+
+.sunburst-info-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.sunburst-info-lines {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary, var(--text-muted));
+}
+
+.sunburst-info-hint {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+    .sunburst-body {
+        flex-direction: column;
+    }
+    .sunburst-info-bar {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 360px;
+    }
 }
 
 .sunburst-section {
