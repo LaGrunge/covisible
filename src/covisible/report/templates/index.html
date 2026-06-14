@@ -246,9 +246,6 @@
     <!-- Tab: Modules -->
     <div class="tab-content{% if not baseline %} active{% endif %}" id="tab-modules">
       <div class="modules-layout">
-        <div class="modules-chart">
-            {% include "components/sunburst.html" %}
-        </div>
         <div class="modules-browser">
         <div class="files-table-container">
             <table class="files-table directory-table" id="browser-table">
@@ -272,6 +269,9 @@
                 </tbody>
             </table>
         </div>
+        </div>
+        <div class="modules-chart">
+            {% include "components/sunburst.html" %}
         </div>
       </div>
     </div>
