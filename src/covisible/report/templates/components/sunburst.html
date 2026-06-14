@@ -30,13 +30,15 @@
         let h, s, l;
         if (p < 50) {            // red tier: deep red -> orange-red
             const t = p / 50;
-            h = mix(0, 18, t); s = 85; l = mix(55, 52, t);
+            h = mix(0, 22, t); s = 88; l = mix(58, 48, t);
         } else if (p < 80) {     // amber tier: orange -> yellow
             const t = (p - 50) / 30;
-            h = mix(30, 52, t); s = 92; l = 50;
-        } else {                 // green tier: lime -> green
-            const t = (p - 80) / 20;
-            h = mix(95, 142, t); s = mix(68, 71, t); l = mix(46, 42, t);
+            h = mix(28, 55, t); s = 92; l = mix(56, 48, t);
+        } else {                 // green tier: light lime -> deep green
+            // Coverage clusters at the high end, so ease (t^2) and swing both
+            // hue and lightness hard — this is what separates 96% from 100%.
+            const t = Math.pow((p - 80) / 20, 2);
+            h = mix(78, 150, t); s = mix(60, 85, t); l = mix(62, 30, t);
         }
         return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
     }
