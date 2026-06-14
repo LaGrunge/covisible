@@ -157,6 +157,58 @@ class TestAnalyzerModePages:
         assert_links_resolve(tmp_path / "report")
 
 
+class TestSourceMissingFallback:
+    """When source files aren't on disk, file pages must still show coverage."""
+
+    def test_file_page_renders_coverage_without_source(self, tmp_path):
+        # CURRENT_LCOV paths (/repo/...) do not exist on disk, so source
+        # reading yields nothing — the page must fall back to coverage rows.
+        current = parse_lcov_string(CURRENT_LCOV)
+        gen = ReportGenerator(coverage=current, output_dir=tmp_path / "report")
+        gen.generate_html()
+
+        page = (
+            tmp_path / "report" / "files" / "_repo_storage_orthus_core_key.cpp.html"
+        ).read_text()
+
+        # The "source not found" note is shown…
+        assert "source-missing-note" in page
+        # …and a row is emitted for each executable line (1, 2, 3).
+        for line_num in (1, 2, 3):
+            assert f'data-line="{line_num}"' in page
+        # Covered vs uncovered status reflects the hit counts (1:1, 2:0, 3:1).
+        assert page.count("status-covered-dim") == 2
+        assert page.count("status-uncovered-dim") == 1
+
+
+class TestFunctionNavOrdering:
+    """The function dropdown lists uncovered functions first."""
+
+    def test_uncovered_functions_sort_first(self, tmp_path):
+        # 'aaa_covered' is hit, 'zzz_uncovered' is not. Despite the alphabetical
+        # order, the uncovered one must appear first in the dropdown.
+        lcov = (
+            "SF:/repo/storage/orthus/x.cpp\n"
+            "FN:10,20,aaa_covered\n"
+            "FN:30,40,zzz_uncovered\n"
+            "FNDA:5,aaa_covered\n"
+            "FNDA:0,zzz_uncovered\n"
+            "DA:10,5\nDA:30,0\nend_of_record\n"
+        )
+        gen = ReportGenerator(
+            coverage=parse_lcov_string(lcov), output_dir=tmp_path / "report"
+        )
+        gen.generate_html()
+
+        page = (
+            tmp_path / "report" / "files" / "_repo_storage_orthus_x.cpp.html"
+        ).read_text()
+        dropdown = page.split('id="func-dropdown"', 1)[1].split("</div>\n        </div>", 1)[0]
+
+        assert dropdown.index("zzz_uncovered") < dropdown.index("aaa_covered")
+        assert dropdown.index("func-item-uncovered") < dropdown.index("func-item-covered")
+
+
 class TestMarkdownBrief:
     def test_brief_has_deltas(self):
         current = parse_lcov_string(CURRENT_LCOV)

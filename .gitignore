@@ -78,3 +78,8 @@ dmypy.json
 coverage-report/
 *.json
 !pyproject.toml
+
+# Coverage input artifacts (test data, not source)
+*.lcov
+*.info
+baseline/

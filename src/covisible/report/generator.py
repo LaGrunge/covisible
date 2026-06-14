@@ -4,18 +4,39 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, PackageLoader, Template, select_autoescape
 
 from covisible.analysis.blame import get_uncovered_blame_summary
 from covisible.analysis.grouping import group_coverage_by_directory
 from covisible.analysis.history import CoverageHistory
-from covisible.analysis.pr_coverage import PRCoverageAnalyzer
+from covisible.analysis.pr_coverage import FilePRCoverage, PRCoverageAnalyzer
 from covisible.analysis.treemap import build_treemap_data
-from covisible.core.models import CoverageData
+from covisible.core.models import CoverageData, FileCoverage
+
+
+def _empty_stats() -> dict[str, Any]:
+    """Return a fresh zeroed directory-stats accumulator."""
+    return {
+        "total_lines": 0,
+        "covered_lines": 0,
+        "total_functions": 0,
+        "covered_functions": 0,
+    }
+
+
+def _finalize_stat_percentages(stats: dict[str, Any]) -> None:
+    """Fill in line/function coverage percentages from accumulated counts."""
+    stats["line_coverage_percent"] = (
+        stats["covered_lines"] / stats["total_lines"] * 100 if stats["total_lines"] > 0 else 100.0
+    )
+    stats["function_coverage_percent"] = (
+        stats["covered_functions"] / stats["total_functions"] * 100
+        if stats["total_functions"] > 0
+        else 100.0
+    )
 
 
 class ReportGenerator:
@@ -165,7 +186,7 @@ class ReportGenerator:
             ]
         else:
             context["files"] = self._build_files_with_delta()
-        
+
         # Build baseline lookup for JS
         if self.baseline:
             context["baseline_tree_data"] = self._build_baseline_tree_for_spa()
@@ -238,7 +259,7 @@ class ReportGenerator:
                             "name": parts[-2] if len(parts) > 1 else "root",
                             "files": [],
                             "subdirs": [],
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
                     tree[parent_path]["files"].append({
                         "name": parts[-1],
@@ -261,7 +282,7 @@ class ReportGenerator:
                             "name": parts[i],
                             "files": [],
                             "subdirs": [],
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
 
                     # Add to parent's subdirs
@@ -270,7 +291,7 @@ class ReportGenerator:
                             "name": parts[i-1] if i > 0 else "root",
                             "files": [],
                             "subdirs": [],
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
                     if parts[i] not in tree[parent_path]["subdirs"]:
                         tree[parent_path]["subdirs"].append(parts[i])
@@ -289,18 +310,10 @@ class ReportGenerator:
                     tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
 
         # Calculate percentages
-        for path, node in tree.items():
+        for _path, node in tree.items():
             stats = node["stats"]
-            if stats["total_lines"] > 0:
-                stats["line_coverage_percent"] = (stats["covered_lines"] / stats["total_lines"]) * 100
-                stats["uncovered_lines"] = stats["total_lines"] - stats["covered_lines"]
-            else:
-                stats["line_coverage_percent"] = 100.0
-                stats["uncovered_lines"] = 0
-            if stats["total_functions"] > 0:
-                stats["function_coverage_percent"] = (stats["covered_functions"] / stats["total_functions"]) * 100
-            else:
-                stats["function_coverage_percent"] = 100.0
+            _finalize_stat_percentages(stats)
+            stats["uncovered_lines"] = stats["total_lines"] - stats["covered_lines"]
             stats["file_count"] = len(node["files"])
 
         return tree
@@ -308,21 +321,21 @@ class ReportGenerator:
     def _build_files_with_delta(self) -> list[dict[str, Any]]:
         """Build files list with baseline delta information."""
         files_list = []
-        
+
         # Build baseline lookup by relative path
         baseline_lookup: dict[str, Any] = {}
         if self.baseline:
             for path, file_cov in self.baseline.files.items():
                 rel_path = str(self._get_relative_path(path))
                 baseline_lookup[rel_path] = file_cov
-        
+
         for path, file_cov in sorted(
             self.coverage.files.items(),
             key=lambda x: x[1].uncovered_lines,
             reverse=True,
         ):
             rel_path = str(self._get_relative_path(path))
-            
+
             file_data = {
                 "path": str(path),
                 "rel_path": rel_path,
@@ -335,14 +348,16 @@ class ReportGenerator:
                 "covered_functions": file_cov.covered_functions,
                 "function_coverage_percent": file_cov.function_coverage_percent,
             }
-            
+
             # Add delta if baseline exists
             if rel_path in baseline_lookup:
                 baseline_file = baseline_lookup[rel_path]
                 file_data["baseline_coverage_percent"] = baseline_file.line_coverage_percent
                 file_data["baseline_covered_lines"] = baseline_file.covered_lines
                 file_data["baseline_total_lines"] = baseline_file.total_lines
-                file_data["coverage_delta"] = file_cov.line_coverage_percent - baseline_file.line_coverage_percent
+                file_data["coverage_delta"] = (
+                    file_cov.line_coverage_percent - baseline_file.line_coverage_percent
+                )
                 file_data["lines_delta"] = file_cov.covered_lines - baseline_file.covered_lines
                 file_data["is_new_file"] = False
             elif self.baseline:
@@ -354,18 +369,18 @@ class ReportGenerator:
                 file_data["is_new_file"] = False
                 file_data["coverage_delta"] = None
                 file_data["lines_delta"] = None
-            
+
             files_list.append(file_data)
-        
+
         return files_list
 
     def _build_impacted_modules(self) -> list[dict[str, Any]]:
         """Build list of modules with coverage changes for comparison tab."""
         if not self.baseline:
             return []
-        
+
         from collections import defaultdict
-        
+
         def get_module(path: Path) -> tuple[str, str]:
             """Extract module name and path from file path.
 
@@ -378,10 +393,9 @@ class ReportGenerator:
 
             # Find src/ or similar and take next part
             for i, part in enumerate(parts):
-                if part in ("src", "lib", "app", "pkg"):
-                    if i + 1 < len(parts) - 1:
-                        module_path = "/".join(parts[:i+2])
-                        return parts[i+1], module_path
+                if part in ("src", "lib", "app", "pkg") and i + 1 < len(parts) - 1:
+                    module_path = "/".join(parts[:i+2])
+                    return parts[i+1], module_path
 
             # Fallback: first directory
             if len(parts) > 1:
@@ -389,38 +403,40 @@ class ReportGenerator:
             # Top-level file — group under the tree root ("" navigates
             # to the root listing), not a bogus per-file module.
             return "(root)", ""
-        
+
         # Aggregate by module
-        current_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
-        baseline_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
+        current_modules: dict[str, dict[str, int]] = defaultdict(lambda: {"covered": 0, "total": 0})
+        baseline_modules: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"covered": 0, "total": 0}
+        )
         module_paths: dict[str, str] = {}
-        
+
         for path, f in self.coverage.files.items():
             name, mod_path = get_module(path)
             current_modules[name]["covered"] += f.covered_lines
             current_modules[name]["total"] += f.total_lines
             module_paths[name] = mod_path
-        
+
         for path, f in self.baseline.files.items():
             name, mod_path = get_module(path)
             baseline_modules[name]["covered"] += f.covered_lines
             baseline_modules[name]["total"] += f.total_lines
             if name not in module_paths:
                 module_paths[name] = mod_path
-        
+
         # Calculate deltas
-        impacted = []
+        impacted: list[dict[str, Any]] = []
         all_modules = set(current_modules.keys()) | set(baseline_modules.keys())
-        
+
         for name in all_modules:
             curr = current_modules.get(name, {"covered": 0, "total": 0})
             base = baseline_modules.get(name, {"covered": 0, "total": 0})
-            
+
             curr_pct = (curr["covered"] / curr["total"] * 100) if curr["total"] > 0 else 0
             base_pct = (base["covered"] / base["total"] * 100) if base["total"] > 0 else 0
-            
+
             delta = curr_pct - base_pct
-            
+
             if abs(delta) > 0.01:  # Only show if changed
                 impacted.append({
                     "name": name,
@@ -430,7 +446,7 @@ class ReportGenerator:
                     "delta": delta,
                     "is_new": name not in baseline_modules,
                 })
-        
+
         # Sort by absolute delta
         impacted.sort(key=lambda x: abs(x["delta"]), reverse=True)
         return impacted
@@ -439,22 +455,22 @@ class ReportGenerator:
         """Build list of files with coverage changes for comparison tab."""
         if not self.baseline:
             return []
-        
+
         # Build baseline lookup by relative path
         baseline_lookup: dict[str, Any] = {}
         for path, file_cov in self.baseline.files.items():
             rel_path = str(self._get_relative_path(path))
             baseline_lookup[rel_path] = file_cov
-        
+
         impacted = []
-        
+
         for path, file_cov in self.coverage.files.items():
             rel_path = str(self._get_relative_path(path))
-            
+
             if rel_path in baseline_lookup:
                 baseline_file = baseline_lookup[rel_path]
                 delta = file_cov.line_coverage_percent - baseline_file.line_coverage_percent
-                
+
                 if abs(delta) > 0.01:  # Only show if changed
                     impacted.append({
                         "path": str(path),
@@ -474,7 +490,7 @@ class ReportGenerator:
                     "delta": None,
                     "is_new": True,
                 })
-        
+
         # Sort by absolute delta (new files last)
         impacted.sort(key=lambda x: abs(x["delta"]) if x["delta"] is not None else -1, reverse=True)
         return impacted[:20]  # Limit to top 20
@@ -503,7 +519,7 @@ class ReportGenerator:
                         tree[parent_path] = {
                             "name": parts[-2] if len(parts) > 1 else "root",
                             "files": {},
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
                     tree[parent_path]["files"][parts[-1]] = {
                         "total_lines": file_cov.total_lines,
@@ -522,14 +538,14 @@ class ReportGenerator:
                         tree[dir_path] = {
                             "name": parts[i],
                             "files": {},
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
 
                     if parent_path not in tree:
                         tree[parent_path] = {
                             "name": parts[i-1] if i > 0 else "root",
                             "files": {},
-                            "stats": {"total_lines": 0, "covered_lines": 0, "total_functions": 0, "covered_functions": 0}
+                            "stats": _empty_stats(),
                         }
 
         # Calculate stats for each directory
@@ -546,20 +562,12 @@ class ReportGenerator:
                     tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
 
         # Calculate percentages
-        for path, node in tree.items():
-            stats = node["stats"]
-            if stats["total_lines"] > 0:
-                stats["line_coverage_percent"] = (stats["covered_lines"] / stats["total_lines"]) * 100
-            else:
-                stats["line_coverage_percent"] = 100.0
-            if stats["total_functions"] > 0:
-                stats["function_coverage_percent"] = (stats["covered_functions"] / stats["total_functions"]) * 100
-            else:
-                stats["function_coverage_percent"] = 100.0
+        for _path, node in tree.items():
+            _finalize_stat_percentages(node["stats"])
 
         return tree
 
-    def _generate_file_page(self, path: Path, pr_cov) -> None:
+    def _generate_file_page(self, path: Path, pr_cov: FilePRCoverage) -> None:
         """Generate individual file page with PR diff view."""
         template = self.env.get_template("file.html")
 
@@ -586,7 +594,7 @@ class ReportGenerator:
         html = template.render(**context)
         output_path.write_text(html)
 
-    def _generate_file_page_simple(self, path: Path, file_cov) -> None:
+    def _generate_file_page_simple(self, path: Path, file_cov: FileCoverage) -> None:
         """Generate individual file page without PR context."""
         template = self.env.get_template("file.html")
 
@@ -601,7 +609,7 @@ class ReportGenerator:
 
         # Compute relative path from project root
         rel_path = self._get_relative_path(path)
-        
+
         # Get baseline coverage for this file if available
         baseline_file_cov = None
         if self.baseline:
@@ -613,7 +621,7 @@ class ReportGenerator:
                     baseline_file_cov = baseline_cov
                     break
 
-        context = {
+        context: dict[str, Any] = {
             "title": f"{path.name} — {self.title}",
             "file_path": str(rel_path),
             "file_name": path.name,
@@ -707,7 +715,7 @@ class ReportGenerator:
         }
         return ext_map.get(path.suffix.lower(), "plaintext")
 
-    def _demangle_functions(self, file_cov):
+    def _demangle_functions(self, file_cov: FileCoverage | None) -> FileCoverage | None:
         """Demangle C++ function names and fix missing start_line."""
         if not file_cov or not file_cov.functions:
             return file_cov
@@ -830,10 +838,10 @@ class ReportGenerator:
         """Check if coverage meets CI thresholds."""
         if self.coverage.line_coverage_percent < line_coverage_min:
             return False
-        if self.analyzer:
-            if self.analyzer.summary.new_lines_coverage_percent < new_code_coverage_min:
-                return False
-        return True
+        return not (
+            self.analyzer
+            and self.analyzer.summary.new_lines_coverage_percent < new_code_coverage_min
+        )
 
     def _generate_directory_pages(self) -> None:
         """Generate directory index pages for tree navigation."""
@@ -920,7 +928,7 @@ class ReportGenerator:
 
     def _generate_single_directory_page(
         self,
-        template,
+        template: Template,
         dir_path: str,
         dir_info: dict[str, Any],
         tree: dict[str, dict[str, Any]],
@@ -986,10 +994,7 @@ class ReportGenerator:
         }
 
         # Create output directory and file
-        if dir_path:
-            output_dir = self.output_dir / "dirs" / dir_path
-        else:
-            output_dir = self.output_dir / "dirs"
+        output_dir = self.output_dir / "dirs" / dir_path if dir_path else self.output_dir / "dirs"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "index.html"
 

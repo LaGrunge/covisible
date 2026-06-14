@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
 from rich.table import Table
 
 from covisible.analysis.diff import DiffAnalyzer
-from covisible.analysis.pr_coverage import PRCoverageAnalyzer
+from covisible.analysis.pr_coverage import PRCoverageAnalyzer, PRCoverageSummary
 from covisible.core.models import CoverageData
 from covisible.parsers.gcov_json import parse_gcov_json
 from covisible.parsers.lcov import parse_lcov
@@ -88,6 +89,18 @@ def main() -> None:
     default=False,
     help="Include git blame analysis for uncovered code",
 )
+@click.option(
+    "--exclude",
+    "exclude_patterns",
+    multiple=True,
+    metavar="GLOB",
+    help="Glob of files to exclude from the report (repeatable, e.g. --exclude '*_test.cpp')",
+)
+@click.option(
+    "--ignore-config",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to an ignore config (YAML/JSON) with exclude/include/line_markers",
+)
 def report(
     current: Path,
     baseline: Path | None,
@@ -98,6 +111,8 @@ def report(
     repo: Path | None,
     title: str,
     blame: bool,
+    exclude_patterns: tuple[str, ...],
+    ignore_config: Path | None,
 ) -> None:
     """Generate coverage report."""
     console.print("[bold blue]Covisible[/] — Generating coverage report...\n")
@@ -121,6 +136,21 @@ def report(
     if baseline:
         baseline_cov = detect_and_parse(baseline)
         console.print(f"✓ Loaded baseline coverage: [green]{baseline}[/]")
+
+    # Apply ignore/exclude rules (file patterns + line markers) if requested.
+    if exclude_patterns or ignore_config:
+        from covisible.core.ignore import IgnoreFilter, load_ignore_config
+
+        ignore_filter = IgnoreFilter(
+            load_ignore_config(ignore_config, list(exclude_patterns) or None)
+        )
+        before = current_cov.total_files
+        current_cov = ignore_filter.filter_coverage_data(current_cov)
+        if baseline_cov:
+            baseline_cov = ignore_filter.filter_coverage_data(baseline_cov)
+        console.print(
+            f"✓ Applied ignore rules: [green]{before} → {current_cov.total_files}[/] files kept"
+        )
 
     diff = None
     if git_diff_range:
@@ -159,7 +189,7 @@ def report(
             base_path=repo,
             enable_blame=blame,
         )
-        
+
         # Print coverage diff summary if baseline provided
         if baseline_cov:
             _print_coverage_diff(current_cov, baseline_cov, limit=10)
@@ -173,7 +203,7 @@ def report(
         console.print(f"✓ JSON report generated: [green]{output}/coverage.json[/]")
 
 
-def _print_summary(summary) -> None:
+def _print_summary(summary: PRCoverageSummary) -> None:
     """Print PR coverage summary to console."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Metric", style="dim")
@@ -302,7 +332,9 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
     type=click.Path(path_type=Path),
     help="Also write a compact markdown brief (for CI PR comments) to this file",
 )
-@click.option("--base-label", type=str, default="Master", help="Baseline column label in --markdown")
+@click.option(
+    "--base-label", type=str, default="Master", help="Baseline column label in --markdown"
+)
 @click.option("--current-label", type=str, default="PR", help="Current column label in --markdown")
 def diff(
     current: Path,
@@ -336,33 +368,35 @@ def diff(
         console.print(f"✓ Markdown brief written: [green]{markdown_out}[/]")
 
 
-def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
+def _print_coverage_diff(
+    current: CoverageData, baseline: CoverageData, limit: int = 10
+) -> None:
     """Print CodeCov-style coverage diff report."""
     # Calculate deltas
     coverage_delta = current.line_coverage_percent - baseline.line_coverage_percent
     lines_delta = current.total_lines - baseline.total_lines
     hits_delta = current.covered_lines - baseline.covered_lines
     misses_delta = current.uncovered_lines - baseline.uncovered_lines
-    
+
     # Header
     console.print()
     console.print("[bold]@@            Coverage Diff             @@[/]")
     console.print("[dim]##             base      head    +/-   ##[/]")
     console.print("[dim]" + "=" * 44 + "[/]")
-    
+
     # Coverage line with color
     delta_style = "green" if coverage_delta >= 0 else "red"
     delta_sign = "+" if coverage_delta >= 0 else ""
     prefix = "+" if coverage_delta >= 0 else "-"
     prefix_style = "green" if coverage_delta >= 0 else "red"
-    
+
     console.print(
         f"[{prefix_style}]{prefix}[/] [bold]Coverage[/]   "
         f"{baseline.line_coverage_percent:>6.2f}%   {current.line_coverage_percent:>6.2f}%   "
         f"[{delta_style}]{delta_sign}{coverage_delta:>5.2f}%[/]"
     )
     console.print("[dim]" + "=" * 44 + "[/]")
-    
+
     # Files, Lines
     console.print(
         f"  Files        {baseline.total_files:>6}    {current.total_files:>6}   "
@@ -372,7 +406,7 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
         f"  Lines        {baseline.total_lines:>6}    {current.total_lines:>6}   "
         f"{_format_delta(lines_delta)}"
     )
-    
+
     # Branches if available
     if baseline.total_branches > 0 or current.total_branches > 0:
         branches_delta = current.total_branches - baseline.total_branches
@@ -380,15 +414,15 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
             f"  Branches     {baseline.total_branches:>6}    {current.total_branches:>6}   "
             f"{_format_delta(branches_delta)}"
         )
-    
+
     console.print("[dim]" + "=" * 44 + "[/]")
-    
+
     # Hits, Misses, Partials
     console.print(
         f"  Hits         {baseline.covered_lines:>6}    {current.covered_lines:>6}   "
         f"{_format_delta(hits_delta, positive_good=True)}"
     )
-    
+
     if misses_delta != 0:
         misses_style = "red" if misses_delta > 0 else "green"
         misses_prefix = "-" if misses_delta > 0 else "+"
@@ -397,10 +431,11 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
         # No empty-style tag: rich raises MarkupError on "[]...[/]".
         misses_lead = " "
     console.print(
-        f"{misses_lead} Misses       {baseline.uncovered_lines:>6}    {current.uncovered_lines:>6}   "
+        f"{misses_lead} Misses       "
+        f"{baseline.uncovered_lines:>6}    {current.uncovered_lines:>6}   "
         f"{_format_delta(misses_delta, positive_good=False)}"
     )
-    
+
     # Partials (branches not fully covered) if available
     if baseline.total_branches > 0 or current.total_branches > 0:
         baseline_partials = baseline.total_branches - baseline.covered_branches
@@ -410,60 +445,59 @@ def _print_coverage_diff(current, baseline, limit: int = 10) -> None:
             f"  Partials     {baseline_partials:>6}    {current_partials:>6}   "
             f"{_format_delta(partials_delta, positive_good=False)}"
         )
-    
+
     console.print()
-    
+
     # Impacted Modules section
     _print_impacted_modules(current, baseline)
-    
+
     # Impacted Files section
     _print_impacted_files(current, baseline, limit)
 
 
-def _print_impacted_modules(current, baseline) -> None:
+def _print_impacted_modules(current: CoverageData, baseline: CoverageData) -> None:
     """Print impacted modules (directories) with coverage changes."""
     from collections import defaultdict
-    
+
     def get_module(path: str) -> str:
         """Extract top-level module from path."""
         parts = path.split("/")
         # Find src/ or similar and take next part, or just first directory
         for i, part in enumerate(parts):
-            if part in ("src", "lib", "app", "pkg"):
-                if i + 1 < len(parts) - 1:
-                    return "/".join(parts[:i+2])
+            if part in ("src", "lib", "app", "pkg") and i + 1 < len(parts) - 1:
+                return "/".join(parts[:i+2])
         # Fallback: first directory
         if len(parts) > 1:
             return parts[0]
         return path
-    
+
     # Aggregate by module
-    current_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
-    baseline_modules: dict[str, dict] = defaultdict(lambda: {"covered": 0, "total": 0})
-    
+    current_modules: dict[str, dict[str, int]] = defaultdict(lambda: {"covered": 0, "total": 0})
+    baseline_modules: dict[str, dict[str, int]] = defaultdict(lambda: {"covered": 0, "total": 0})
+
     for path, f in current.files.items():
         module = get_module(str(path))
         current_modules[module]["covered"] += f.covered_lines
         current_modules[module]["total"] += f.total_lines
-    
+
     for path, f in baseline.files.items():
         module = get_module(str(path))
         baseline_modules[module]["covered"] += f.covered_lines
         baseline_modules[module]["total"] += f.total_lines
-    
+
     # Calculate deltas
-    impacted = []
+    impacted: list[dict[str, Any]] = []
     all_modules = set(current_modules.keys()) | set(baseline_modules.keys())
-    
+
     for module in all_modules:
         curr = current_modules.get(module, {"covered": 0, "total": 0})
         base = baseline_modules.get(module, {"covered": 0, "total": 0})
-        
+
         curr_pct = (curr["covered"] / curr["total"] * 100) if curr["total"] > 0 else 0
         base_pct = (base["covered"] / base["total"] * 100) if base["total"] > 0 else 0
-        
+
         delta = curr_pct - base_pct
-        
+
         if abs(delta) > 0.01:  # Only show if changed
             impacted.append({
                 "module": module,
@@ -472,23 +506,23 @@ def _print_impacted_modules(current, baseline) -> None:
                 "delta": delta,
                 "is_new": module not in baseline_modules,
             })
-    
+
     if not impacted:
         return
-    
+
     # Sort by absolute delta
     impacted.sort(key=lambda x: abs(x["delta"]), reverse=True)
-    
+
     # Print table
     table = Table(show_header=True, box=None)
     table.add_column("Impacted Modules", style="magenta", max_width=40)
     table.add_column("Coverage Δ", justify="right")
-    
+
     for item in impacted:
         module = item["module"]
         if len(module) > 40:
             module = "..." + module[-37:]
-        
+
         if item["is_new"]:
             delta_str = f"{item['coverage']:.2f}% [blue](new)[/]"
         else:
@@ -496,9 +530,9 @@ def _print_impacted_modules(current, baseline) -> None:
             delta_style = "green" if delta >= 0 else "red"
             delta_sign = "+" if delta >= 0 else ""
             delta_str = f"{item['coverage']:.2f}% [{delta_style}]({delta_sign}{delta:.2f}%)[/]"
-        
+
         table.add_row(module, delta_str)
-    
+
     console.print(table)
     console.print()
 
@@ -507,32 +541,29 @@ def _format_delta(delta: int, positive_good: bool = True) -> str:
     """Format delta value with color."""
     if delta == 0:
         return "      "
-    
+
     sign = "+" if delta > 0 else ""
-    
-    if positive_good:
-        style = "green" if delta > 0 else "red"
-    else:
-        style = "red" if delta > 0 else "green"
-    
+
+    style = ("green" if delta > 0 else "red") if positive_good else "red" if delta > 0 else "green"
+
     return f"[{style}]{sign}{delta:>5}[/]"
 
 
-def _print_impacted_files(current, baseline, limit: int) -> None:
+def _print_impacted_files(current: CoverageData, baseline: CoverageData, limit: int) -> None:
     """Print impacted files table."""
     # Build file comparison
-    impacted = []
-    
+    impacted: list[dict[str, Any]] = []
+
     # Get all file paths from both
     current_files = {str(p): f for p, f in current.files.items()}
     baseline_files = {str(p): f for p, f in baseline.files.items()}
-    
+
     all_paths = set(current_files.keys()) | set(baseline_files.keys())
-    
+
     for path in all_paths:
         curr_file = current_files.get(path)
         base_file = baseline_files.get(path)
-        
+
         if curr_file and base_file:
             # File exists in both - calculate delta
             delta = curr_file.line_coverage_percent - base_file.line_coverage_percent
@@ -552,25 +583,25 @@ def _print_impacted_files(current, baseline, limit: int) -> None:
                 "is_new": True,
             })
         # Deleted files not shown
-    
+
     # Sort by absolute delta (biggest changes first)
     impacted.sort(key=lambda x: abs(x["delta"]) if x["delta"] is not None else 999, reverse=True)
-    
+
     if not impacted:
         console.print("[dim]No impacted files.[/]")
         return
-    
+
     # Print table
     table = Table(show_header=True, box=None)
     table.add_column("Impacted Files", style="cyan", max_width=50)
     table.add_column("Coverage Δ", justify="right")
-    
+
     for item in impacted[:limit]:
         path = item["path"]
         # Shorten path if too long
         if len(path) > 50:
             path = "..." + path[-47:]
-        
+
         if item["is_new"]:
             delta_str = f"{item['coverage']:.2f}% [blue](new)[/]"
         else:
@@ -578,11 +609,11 @@ def _print_impacted_files(current, baseline, limit: int) -> None:
             delta_style = "green" if delta >= 0 else "red"
             delta_sign = "+" if delta >= 0 else ""
             delta_str = f"{item['coverage']:.2f}% [{delta_style}]({delta_sign}{delta:.2f}%)[/]"
-        
+
         table.add_row(path, delta_str)
-    
+
     console.print(table)
-    
+
     if len(impacted) > limit:
         console.print(f"\n[dim]... and {len(impacted) - limit} more files with changes[/]")
 

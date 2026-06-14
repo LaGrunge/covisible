@@ -1,15 +1,16 @@
 <!-- Sunburst Chart Component -->
 <section class="sunburst-section">
-    <div class="sunburst-breadcrumb" id="sunburst-breadcrumb"></div>
-    <div class="sunburst-center-wrapper">
-        <div class="sunburst-chart-fixed" id="sunburst-chart"></div>
-    </div>
-    <div class="sunburst-info-bar" id="sunburst-info">
-        <div class="sunburst-info-path">Hover over segments</div>
-        <div class="sunburst-info-details">
-            <span class="sunburst-info-pct"></span>
-            <span class="sunburst-info-lines"></span>
-            <span class="sunburst-info-hint"></span>
+    <div class="sunburst-body">
+        <div class="sunburst-center-wrapper">
+            <div class="sunburst-chart-fixed" id="sunburst-chart"></div>
+        </div>
+        <div class="sunburst-info-bar" id="sunburst-info">
+            <div class="sunburst-info-path">Hover over segments</div>
+            <div class="sunburst-info-details">
+                <span class="sunburst-info-pct"></span>
+                <span class="sunburst-info-lines"></span>
+                <span class="sunburst-info-hint"></span>
+            </div>
         </div>
     </div>
 </section>
@@ -19,16 +20,27 @@
     const sunburstData = {{ treemap_data | tojson }};
     let sunburstRendered = false;
     
-    // Gradient color based on coverage percentage (0% = red, 100% = green)
+    // Color stays inside the module table's three coverage tiers (>=80 green,
+    // >=50 amber, else red) so a file reads the same tier in both views — but
+    // within each tier the hue shifts with the exact percentage, so e.g. a 78%
+    // file is a more saturated yellow than a 52% one.
     function getCoverageColor(pct, alpha = 0.85) {
-        // Clamp percentage to 0-100
-        const p = Math.max(0, Math.min(100, pct)) / 100;
-        // Interpolate from red (0, 100, 60) to green (120, 100, 45) in HSL
-        // Red: hsl(0, 100%, 60%) -> Green: hsl(120, 100%, 40%)
-        const hue = p * 120; // 0 (red) to 120 (green)
-        const saturation = 75 + p * 10; // 75% to 85%
-        const lightness = 50 - p * 10; // 50% to 40% (darker green for better contrast)
-        return `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+        const p = Math.max(0, Math.min(100, pct));
+        const mix = (a, b, t) => a + (b - a) * t;
+        let h, s, l;
+        if (p < 50) {            // red tier: deep red -> orange-red
+            const t = p / 50;
+            h = mix(0, 22, t); s = 88; l = mix(58, 48, t);
+        } else if (p < 80) {     // amber tier: orange -> yellow
+            const t = (p - 50) / 30;
+            h = mix(28, 55, t); s = 92; l = mix(56, 48, t);
+        } else {                 // green tier: light lime -> deep green
+            // Coverage clusters at the high end, so ease (t^2) and swing both
+            // hue and lightness hard — this is what separates 96% from 100%.
+            const t = Math.pow((p - 80) / 20, 2);
+            h = mix(78, 150, t); s = mix(60, 85, t); l = mix(62, 30, t);
+        }
+        return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
     }
     
     function renderSunburst(data, containerId) {
@@ -85,7 +97,6 @@
                 zoomStack = [data];
                 currentRoot = data;
                 render(currentRoot, animate, prevNodes);
-                updateBreadcrumb();
                 return;
             }
             
@@ -110,40 +121,12 @@
                 zoomStack = newStack;
                 currentRoot = newStack[newStack.length - 1];
                 render(currentRoot, animate, prevNodes);
-                updateBreadcrumb();
             }
         }
         
-        // Get current path for history state
-        function getCurrentPath() {
-            if (zoomStack.length <= 1) return 'root';
-            return zoomStack[zoomStack.length - 1].path || zoomStack[zoomStack.length - 1].name;
-        }
-        
-        // Push state to history
-        function pushHistoryState() {
-            const path = getCurrentPath();
-            const url = new URL(window.location);
-            if (path === 'root') {
-                url.searchParams.delete('sunburst');
-            } else {
-                url.searchParams.set('sunburst', path);
-            }
-            history.pushState({ sunburstPath: path }, '', url);
-        }
-        
-        // Handle popstate (back/forward)
-        window.addEventListener('popstate', (e) => {
-            if (e.state && e.state.sunburstPath !== undefined) {
-                navigateToPath(e.state.sunburstPath, true);
-            } else {
-                // Check URL params as fallback
-                const url = new URL(window.location);
-                const path = url.searchParams.get('sunburst') || 'root';
-                navigateToPath(path, true);
-            }
-        });
-        
+        // History (back/forward) is owned by the modules controller via the
+        // URL hash; the sunburst just follows navigateToPath().
+
         // Collect nodes for a given root
         function collectNodes(rootNode) {
             const nodes = [];
@@ -227,6 +210,23 @@
             requestAnimationFrame(animate);
         }
         
+        // Delegate navigation to the page controller so the modules table and
+        // the sunburst stay in sync; fall back to local zoom if used standalone.
+        function emitNavigate(pathStr) {
+            if (window.onSunburstNavigate) window.onSunburstNavigate(pathStr);
+            else navigateToPath(pathStr, true);
+        }
+
+        function handleNodeClick(node, e) {
+            e.stopPropagation();
+            if (node.is_file && node.full_path) {
+                const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
+                window.location.href = 'files/' + filePath + '.html';
+            } else if (node.children && node.children.length) {
+                emitNavigate(node.path || node.name);
+            }
+        }
+
         function render(rootNode, animate = false, prevNodes = null) {
             const nodes = collectNodes(rootNode);
             
@@ -261,20 +261,7 @@
                         hideInfo();
                     });
                     
-                    path.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (node.is_file && node.full_path) {
-                            const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
-                            window.location.href = 'files/' + filePath + '.html';
-                        } else if (node.children && node.children.length) {
-                            const prevNodes = collectNodes(currentRoot);
-                            zoomStack.push(node);
-                            currentRoot = node;
-                            render(node, true, prevNodes);
-                            updateBreadcrumb();
-                            pushHistoryState();
-                        }
-                    });
+                    path.addEventListener('click', (e) => handleNodeClick(node, e));
                     
                     pathElements.set(node.path || node.name, path);
                     g.appendChild(path);
@@ -313,21 +300,8 @@
                             hideInfo();
                         });
                         
-                        path.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            if (node.is_file && node.full_path) {
-                                const filePath = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
-                                window.location.href = 'files/' + filePath + '.html';
-                            } else if (node.children && node.children.length) {
-                                const prevNodes = collectNodes(currentRoot);
-                                zoomStack.push(node);
-                                currentRoot = node;
-                                render(node, true, prevNodes);
-                                updateBreadcrumb();
-                                pushHistoryState();
-                            }
-                        });
-                        
+                        path.addEventListener('click', (e) => handleNodeClick(node, e));
+
                         pathElements.set(key, path);
                         g.insertBefore(path, g.firstChild);
                     }
@@ -378,15 +352,11 @@
             text.textContent = rootNode.coverage_percent.toFixed(1) + '%';
             centerG.appendChild(text);
             
-            // Click handler on entire center group - animated zoom out
+            // Click handler on entire center group - zoom out to parent dir
             centerG.addEventListener('click', () => {
                 if (zoomStack.length > 1) {
-                    const prevNodes = collectNodes(currentRoot);
-                    zoomStack.pop();
-                    currentRoot = zoomStack[zoomStack.length - 1];
-                    render(currentRoot, true, prevNodes);
-                    updateBreadcrumb();
-                    pushHistoryState();
+                    const parent = zoomStack[zoomStack.length - 2];
+                    emitNavigate(parent === data ? 'root' : (parent.path || parent.name));
                 }
             });
             
@@ -434,71 +404,32 @@
             info.querySelector('.sunburst-info-hint').textContent = '';
         }
         
-        function updateBreadcrumb() {
-            const bc = document.getElementById('sunburst-breadcrumb');
-            if (!bc) return;
-            
-            // Show <whole project> for root level
-            if (zoomStack.length <= 1) {
-                bc.innerHTML = '<span class="bc-current">&lt;whole project&gt;</span>';
-                return;
-            }
-            
-            // Build breadcrumb: <whole project> / dir1 / dir2 / ...
-            let parts = ['<span class="bc-link" data-idx="0">&lt;whole project&gt;</span>'];
-            zoomStack.slice(1).forEach((n, i) => {
-                const name = n.name;
-                const realIdx = i + 1;
-                if (realIdx === zoomStack.length - 1) {
-                    parts.push(`<span class="bc-current">${name}</span>`);
-                } else {
-                    parts.push(`<span class="bc-link" data-idx="${realIdx}">${name}</span>`);
-                }
-            });
-            bc.innerHTML = parts.join(' / ');
-            
-            bc.querySelectorAll('.bc-link').forEach(el => {
-                el.addEventListener('click', () => {
-                    const idx = parseInt(el.dataset.idx);
-                    zoomStack = zoomStack.slice(0, idx + 1);
-                    currentRoot = zoomStack[zoomStack.length - 1];
-                    render(currentRoot);
-                    updateBreadcrumb();
-                    pushHistoryState();
-                });
-            });
-        }
-        
-        // Check URL for initial state
-        const initialUrl = new URL(window.location);
-        const initialPath = initialUrl.searchParams.get('sunburst');
-        if (initialPath) {
-            navigateToPath(initialPath, false);
-        } else {
-            render(data);
-            updateBreadcrumb();
-        }
-        
-        // Replace initial state so back works correctly
-        history.replaceState({ sunburstPath: getCurrentPath() }, '', window.location);
+        // Initial render: whole project, then let the controller pull us to
+        // whatever directory the table currently shows.
+        render(data);
+
+        // Exposed so the modules controller can focus the chart on a directory.
+        window.sunburstFocus = function(path, animate = true) {
+            navigateToPath(path || 'root', animate);
+        };
+        const startPath = window.getCurrentModulePath ? window.getCurrentModulePath() : '';
+        if (startPath) navigateToPath(startPath, false);
     }
-    
+
     function tryRenderSunburst() {
         if (sunburstRendered) return;
         const container = document.getElementById('sunburst-chart');
-        const tab = document.getElementById('tab-sunburst');
-        
-        if (container && tab && tab.classList.contains('active') && sunburstData?.children?.length) {
+        // Render eagerly even while the tab is hidden — the SVG geometry is
+        // computed from data, not layout, so it's safe and makes the chart
+        // ready to follow the table the moment navigateTo() fires.
+        if (container && sunburstData?.children?.length) {
             renderSunburst(sunburstData, 'sunburst-chart');
             sunburstRendered = true;
         }
     }
-    
+
     function setup() {
         tryRenderSunburst();
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => setTimeout(tryRenderSunburst, 50));
-        });
     }
     
     if (document.readyState === 'loading') {

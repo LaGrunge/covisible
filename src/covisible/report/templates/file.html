@@ -72,7 +72,9 @@
         <div class="func-search-container">
             <input type="text" id="func-search" class="func-search" placeholder="🔍 Search functions..." autocomplete="off">
             <div id="func-dropdown" class="func-dropdown hidden">
-                {% for func in coverage.functions|sort(attribute='demangled_name') %}
+                {# Uncovered functions first (is_covered False sorts before True),
+                   alphabetical within each group — sort is stable. #}
+                {% for func in coverage.functions|sort(attribute='demangled_name')|sort(attribute='is_covered') %}
                 <div class="func-item {% if func.is_covered %}func-item-covered{% else %}func-item-uncovered{% endif %}" 
                      data-line="{{ func.start_line }}" 
                      data-name="{{ (func.demangled_name or func.name)|lower }}">
@@ -102,6 +104,13 @@
         </div>
         {% endif %}
     </div>
+
+    {% if not source_lines and coverage and coverage.lines %}
+    <div class="source-missing-note">
+        ⚠️ Source file not found on disk ({{ file_path }}) — showing coverage data only
+        (line numbers + hit counts). Generate the report where the sources live to see code.
+    </div>
+    {% endif %}
 
     <div class="source-container">
         <table class="source-table" id="source-table">
@@ -152,6 +161,29 @@
                     <td class="line-code"><pre><code class="language-{{ language }}">{{ line|e }}</code></pre></td>
                 </tr>
                 {% endfor %}
+
+                {# Fallback: no source on disk, but we have coverage data.
+                   Render one row per executable line so the page isn't blank. #}
+                {% if not source_lines and coverage and coverage.lines %}
+                {% for line_num, line_cov in coverage.lines|dictsort %}
+                {% set is_covered = line_cov.is_covered %}
+                <tr class="source-line {% if is_covered %}line-covered{% else %}line-uncovered{% endif %}"
+                    data-line="{{ line_num }}"
+                    data-covered="{{ is_covered|lower }}"
+                    data-changed="false">
+                    <td class="line-number">{{ line_num }}</td>
+                    <td class="line-status">
+                        {% if is_covered %}
+                        <span class="status-icon status-covered-dim" title="Covered">●</span>
+                        {% else %}
+                        <span class="status-icon status-uncovered-dim" title="Not covered">●</span>
+                        {% endif %}
+                    </td>
+                    <td class="line-hits"><span class="hits-count">{{ line_cov.count }}×</span></td>
+                    <td class="line-code"><pre><code class="language-{{ language }}"></code></pre></td>
+                </tr>
+                {% endfor %}
+                {% endif %}
             </tbody>
         </table>
     </div>
