@@ -72,7 +72,9 @@
         <div class="func-search-container">
             <input type="text" id="func-search" class="func-search" placeholder="🔍 Search functions..." autocomplete="off">
             <div id="func-dropdown" class="func-dropdown hidden">
-                {% for func in coverage.functions|sort(attribute='demangled_name') %}
+                {# Uncovered functions first (is_covered False sorts before True),
+                   alphabetical within each group — sort is stable. #}
+                {% for func in coverage.functions|sort(attribute='demangled_name')|sort(attribute='is_covered') %}
                 <div class="func-item {% if func.is_covered %}func-item-covered{% else %}func-item-uncovered{% endif %}" 
                      data-line="{{ func.start_line }}" 
                      data-name="{{ (func.demangled_name or func.name)|lower }}">
