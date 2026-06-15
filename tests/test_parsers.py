@@ -127,6 +127,34 @@ end_of_record
         assert line.branches[0].is_covered
         assert not line.branches[1].is_covered
 
+    def test_parse_branches_textual_branch_id(self):
+        # coverage.py (Python) emits human-readable branch destinations
+        # ("jump to line N") instead of numeric ids; covisible must still
+        # count them rather than silently dropping the records.
+        lcov_content = (
+            "SF:/p/a.py\n"
+            "DA:62,1\n"
+            "BRDA:62,0,jump to line 63,0\n"
+            "BRDA:62,0,jump to line 65,1\n"
+            "end_of_record\n"
+        )
+        cov = parse_lcov_string(lcov_content)
+
+        file_cov = list(cov.files.values())[0]
+        assert file_cov.total_branches == 2
+        assert file_cov.covered_branches == 1
+        line = file_cov.lines[62]
+        # Non-numeric descriptors get synthetic per-line ids.
+        assert {b.branch_id for b in line.branches} == {0, 1}
+
+    def test_parse_branch_exception_block_not_taken(self):
+        # lcov v2 exception blocks: "BRDA:line,e<n>,<branch>,-" (taken "-").
+        cov = parse_lcov_string("SF:/p/a.cpp\nBRDA:59,e0,1,-\nend_of_record\n")
+        line = list(cov.files.values())[0].lines[59]
+        assert len(line.branches) == 1
+        assert line.branches[0].is_throw
+        assert not line.branches[0].is_covered
+
     def test_parse_multiple_files(self):
         lcov_content = """TN:
 SF:/path/to/file1.cpp

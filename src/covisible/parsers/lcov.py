@@ -115,32 +115,45 @@ def parse_lcov_string(content: str) -> CoverageData:
                     )
 
         elif line.startswith("BRDA:"):
-            # Block ids may carry an "e" prefix (lcov v2 marks exception
-            # branches as e.g. "BRDA:59,e0,1,-"); dropping those records
-            # makes branch totals disagree with `lcov --summary`.
-            match = re.match(r"BRDA:(\d+),(e?\d+),(\d+),(-|\d+)", line)
-            if match and current_file:
-                line_num = int(match.group(1))
-                block_id = match.group(2)
-                branch_id = int(match.group(3))
-                taken_str = match.group(4)
+            # BRDA:<line>,<block>,<branch>,<taken>. Parse positionally so every
+            # producer is handled: gcov uses numeric branch ids, lcov v2 marks
+            # exception blocks with an "e" prefix (taken may be "-"), and
+            # coverage.py emits a *textual* branch descriptor
+            # ("jump to line 63") instead of a number. The branch field is
+            # everything between the block id and the trailing taken count, and
+            # gets a synthetic per-line id when it is not numeric — otherwise
+            # those records were silently dropped and branch totals read 0.
+            parts = line[5:].split(",")
+            taken_str = parts[-1] if parts else ""
+            if (
+                len(parts) >= 4
+                and current_file
+                and parts[0].isdigit()
+                and (taken_str == "-" or taken_str.isdigit())
+            ):
+                line_num = int(parts[0])
+                block_id = parts[1]
+                branch_field = ",".join(parts[2:-1])
                 taken = 0 if taken_str == "-" else int(taken_str)
 
-                branch = BranchCoverage(
-                    line_number=line_num,
-                    branch_id=branch_id,
-                    count=taken,
-                    is_throw=block_id.startswith("e"),
-                )
+                line_cov = current_file.lines.get(line_num)
+                if line_cov is None:
+                    line_cov = LineCoverage(line_number=line_num, count=0)
+                    current_file.lines[line_num] = line_cov
 
-                if line_num in current_file.lines:
-                    current_file.lines[line_num].branches.append(branch)
-                else:
-                    current_file.lines[line_num] = LineCoverage(
+                try:
+                    branch_id = int(branch_field)
+                except ValueError:
+                    branch_id = len(line_cov.branches)
+
+                line_cov.branches.append(
+                    BranchCoverage(
                         line_number=line_num,
-                        count=0,
-                        branches=[branch],
+                        branch_id=branch_id,
+                        count=taken,
+                        is_throw=block_id.startswith("e"),
                     )
+                )
 
         elif line == "end_of_record":
             current_file = None
