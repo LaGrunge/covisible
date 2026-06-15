@@ -494,3 +494,231 @@ def test_diff_limit_zero_shows_all(tmp_path):
     result = CliRunner().invoke(main, ["diff", str(curr), "-b", str(base), "-n", "0"])
     assert result.exit_code == 0, result.output
     assert "more files with changes" not in result.output
+
+
+# --- summary command --------------------------------------------------------
+
+
+def test_summary_command_prints_totals(tmp_path):
+    cov = _write_lcov(tmp_path)
+    result = CliRunner().invoke(main, ["summary", str(cov)])
+    assert result.exit_code == 0, result.output
+    assert "Coverage Summary" in result.output
+    for row in ("Lines", "Functions", "Branches"):
+        assert row in result.output
+
+
+def test_summary_autodetects_gcov_json(tmp_path):
+    p = tmp_path / "cov.gcov.json"
+    p.write_text(
+        json.dumps(
+            {"files": [{"file": "a.cpp", "lines": [{"line_number": 1, "count": 1}]}]}
+        )
+    )
+    result = CliRunner().invoke(main, ["summary", str(p)])
+    assert result.exit_code == 0, result.output
+    assert "Coverage Summary" in result.output
+
+
+# --- files command sort options ---------------------------------------------
+
+
+def test_files_sort_options(tmp_path):
+    cov = tmp_path / "c.lcov"
+    cov.write_text(_LCOV_THREE)
+    for sort in ("coverage", "name", "uncovered"):
+        result = CliRunner().invoke(main, ["files", str(cov), "--sort", sort])
+        assert result.exit_code == 0, result.output
+        for name in ("a.c", "b.c", "c.c"):
+            assert name in result.output
+
+
+# --- diff command: markdown, rich modules/branches, no-change ----------------
+
+
+def test_diff_markdown_brief(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(_BASE_DIFF)
+    curr.write_text(_CURR_DIFF)
+    md = tmp_path / "brief.md"
+    result = CliRunner().invoke(
+        main,
+        ["diff", str(curr), "-b", str(base), "--markdown", str(md),
+         "--base-label", "Master", "--current-label", "PR"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Markdown brief written" in result.output
+    assert md.exists() and md.read_text().strip()
+
+
+# Branches + nested modules ("src/pkg", first-dir "foo", a very long module)
+# plus a brand-new file/module exercise the impacted-modules/files renderers.
+_DIFF_BASE_RICH = """\
+SF:src/pkg/a.c
+DA:1,1
+DA:2,1
+BRDA:1,0,0,1
+BRDA:1,0,1,1
+end_of_record
+SF:foo/b.c
+DA:1,1
+DA:2,1
+end_of_record
+SF:src/{long}/deep.c
+DA:1,1
+end_of_record
+""".format(long="d" * 50)
+
+_DIFF_CURR_RICH = """\
+SF:src/pkg/a.c
+DA:1,1
+DA:2,0
+BRDA:1,0,0,1
+BRDA:1,0,1,0
+end_of_record
+SF:foo/b.c
+DA:1,1
+DA:2,0
+end_of_record
+SF:src/{long}/deep.c
+DA:1,0
+end_of_record
+SF:newmod/new.c
+DA:1,1
+end_of_record
+""".format(long="d" * 50)
+
+
+def test_diff_rich_modules_branches_and_new_file(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(_DIFF_BASE_RICH)
+    curr.write_text(_DIFF_CURR_RICH)
+    result = CliRunner().invoke(main, ["diff", str(curr), "-b", str(base), "-n", "0"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "Coverage Diff" in out
+    assert "Partials" in out  # branch data present -> partials row
+    assert "Impacted" in out  # impacted modules/files headers
+    assert "(new)" in out  # the brand-new file/module
+
+
+_DIFF_SAME = "SF:a.c\nDA:1,1\nDA:2,0\nend_of_record\n"
+
+
+def test_diff_no_changes_reports_none(tmp_path):
+    f = tmp_path / "x.lcov"
+    f.write_text(_DIFF_SAME)
+    result = CliRunner().invoke(main, ["diff", str(f), "-b", str(f)])
+    assert result.exit_code == 0, result.output
+    assert "No impacted files" in result.output
+
+
+# --- report: baseline diff, PR mode, auto title -----------------------------
+
+
+def test_report_with_baseline_prints_diff(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(_BASE_DIFF)
+    curr.write_text(_CURR_DIFF)
+    out = tmp_path / "r"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(curr), "-b", str(base), "-o", str(out)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Loaded baseline coverage" in result.output
+    assert "Coverage Diff" in result.output
+
+
+_PR_DIFF = """\
+diff --git a/src/a.cpp b/src/a.cpp
+--- a/src/a.cpp
++++ b/src/a.cpp
+@@ -1,0 +1,2 @@
++int x = 1;
++int y = 2;
+"""
+
+
+def test_report_diff_file_enters_pr_mode(tmp_path):
+    cov = tmp_path / "c.lcov"
+    cov.write_text("SF:src/a.cpp\nDA:1,1\nDA:2,0\nend_of_record\n")
+    diff = tmp_path / "pr.diff"
+    diff.write_text(_PR_DIFF)
+    out = tmp_path / "r"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "--diff-file", str(diff), "-o", str(out)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Parsed diff file" in result.output
+    assert "PR Coverage Summary" in result.output
+
+
+def test_report_fail_under_new_gates_in_pr_mode(tmp_path):
+    cov = tmp_path / "c.lcov"
+    cov.write_text("SF:src/a.cpp\nDA:1,1\nDA:2,0\nend_of_record\n")
+    diff = tmp_path / "pr.diff"
+    diff.write_text(_PR_DIFF)
+    out = tmp_path / "r"
+    # New lines {1,2}, only line 1 covered -> 50% new coverage < required 90.
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "--diff-file", str(diff), "-o", str(out),
+         "--fail-under-new", "90"],
+    )
+    assert result.exit_code == 1
+    assert "new-code coverage" in result.output
+
+
+def test_report_repo_sets_auto_title(tmp_path):
+    cov = _write_lcov(tmp_path)
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    out = tmp_path / "r"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--repo", str(repo)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Covisible: myrepo" in (out / "index.html").read_text()
+
+
+def test_report_resolves_real_source_files(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.cpp").write_text("int main() { return 0; }\n")
+    cov = tmp_path / "c.lcov"
+    cov.write_text("SF:a.cpp\nDA:1,1\nend_of_record\n")
+    out = tmp_path / "r"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--source-root", str(src)]
+    )
+    assert result.exit_code == 0, result.output
+    # Source exists on disk -> "Resolved N source files" (not the missing branch).
+    assert "Resolved" in result.output
+
+
+def test_report_baseline_path_rewrite_and_filter(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(
+        "SF:/build/src/a.cpp\nDA:1,1\nend_of_record\n"
+        "SF:/build/src/a_test.cpp\nDA:1,1\nend_of_record\n"
+    )
+    curr.write_text(
+        "SF:/build/src/a.cpp\nDA:1,0\nend_of_record\n"
+        "SF:/build/src/a_test.cpp\nDA:1,1\nend_of_record\n"
+    )
+    out = tmp_path / "r"
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(curr), "-b", str(base), "-o", str(out), "--format", "json",
+         "--substitute", "s#/build/##", "--exclude", "*_test.cpp"],
+    )
+    assert result.exit_code == 0, result.output
+    # Both transforms applied to baseline as well as current.
+    assert "Rewrote coverage file paths" in result.output
+    assert "Applied ignore rules" in result.output
+    files = set(json.loads((out / "coverage.json").read_text())["files"])
+    assert files == {"src/a.cpp"}
