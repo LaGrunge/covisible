@@ -154,6 +154,25 @@ def test_report_history_accumulates_and_renders_trend(tmp_path):
     assert "Coverage Trend" in html
 
 
+def test_report_merges_multiple_current_files(tmp_path):
+    a = tmp_path / "a.info"
+    a.write_text("SF:/proj/x.cpp\nDA:1,1\nDA:2,0\nend_of_record\n")
+    b = tmp_path / "b.info"
+    b.write_text("SF:/proj/x.cpp\nDA:1,0\nDA:2,5\nend_of_record\n")
+    out = tmp_path / "report"
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(a), "-c", str(b), "-o", str(out), "--format", "json"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "merged" in result.output  # "Loaded and merged 2 coverage files"
+    summary = json.loads((out / "coverage.json").read_text())["summary"]
+    # Line 1 is covered by a, line 2 by b -> both covered once merged.
+    assert summary["total_lines"] == 2
+    assert summary["covered_lines"] == 2
+    assert summary["line_coverage_percent"] == 100.0
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

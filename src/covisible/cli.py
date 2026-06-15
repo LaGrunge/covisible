@@ -97,10 +97,12 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "--current",
     "-c",
     required=True,
+    multiple=True,
     type=click.Path(exists=True, path_type=Path),
     metavar="FILE",
-    help="Coverage to report on. Format auto-detected: *.json / *.gcov.json is "
-    "read as gcov JSON, anything else as LCOV .info.",
+    help="Coverage to report on. Repeatable: pass -c several times to merge "
+    "shards/test runs (hit counts are summed). Format auto-detected per file: "
+    "*.json / *.gcov.json as gcov JSON, anything else as LCOV .info.",
 )
 @click.option(
     "--baseline",
@@ -242,7 +244,7 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "(an alternative to repeating --exclude).",
 )
 def report(
-    current: Path,
+    current: tuple[Path, ...],
     baseline: Path | None,
     git_diff_range: str | None,
     diff_file: Path | None,
@@ -300,13 +302,18 @@ def report(
             project_name = repo.resolve().name
         else:
             # Try to get project name from coverage file path or cwd
-            project_name = current.resolve().parent.name
+            project_name = current[0].resolve().parent.name
             if project_name in ("coverage", "build", "out", "output", "."):
                 project_name = Path.cwd().name
         title = f"Covisible: {project_name}"
 
-    current_cov = detect_and_parse(current)
-    console.print(f"✓ Loaded current coverage: [green]{current}[/]")
+    current_cov = detect_and_parse(current[0])
+    for extra in current[1:]:
+        current_cov.merge(detect_and_parse(extra))
+    if len(current) == 1:
+        console.print(f"✓ Loaded current coverage: [green]{current[0]}[/]")
+    else:
+        console.print(f"✓ Loaded and merged [green]{len(current)}[/] coverage files")
     console.print(f"  {current_cov.total_files} files, {current_cov.total_lines} lines")
 
     baseline_cov = None

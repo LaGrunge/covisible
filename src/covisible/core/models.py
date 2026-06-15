@@ -212,15 +212,55 @@ class CoverageData:
         return self.files.get(path)
 
     def merge(self, other: Self) -> Self:
-        """Merge another CoverageData into this one."""
+        """Merge another CoverageData into this one (lcov ``-a`` semantics).
+
+        Execution counts are summed, so a line, branch, or function counts as
+        covered when any input covered it. Lines, branches, files, and functions
+        unique to ``other`` are added.
+        """
         for path, file_cov in other.files.items():
-            if path in self.files:
-                existing = self.files[path]
-                for ln, line in file_cov.lines.items():
-                    if ln in existing.lines:
-                        existing.lines[ln].count += line.count
-                    else:
-                        existing.lines[ln] = line
-            else:
+            existing = self.files.get(path)
+            if existing is None:
                 self.files[path] = file_cov
+                continue
+            for ln, line in file_cov.lines.items():
+                cur = existing.lines.get(ln)
+                if cur is None:
+                    existing.lines[ln] = line
+                    continue
+                cur.count += line.count
+                if cur.function_name is None:
+                    cur.function_name = line.function_name
+                # The block is unexecuted only if it stayed unexecuted in both.
+                cur.has_unexecuted_block = (
+                    cur.has_unexecuted_block and line.has_unexecuted_block
+                )
+                _merge_branches(cur, line.branches)
+            _merge_functions(existing, file_cov.functions)
         return self
+
+
+def _merge_branches(line: LineCoverage, incoming: list[BranchCoverage]) -> None:
+    """Merge branch hit counts into ``line`` by branch id, summing counts."""
+    by_id = {b.branch_id: b for b in line.branches}
+    for branch in incoming:
+        match = by_id.get(branch.branch_id)
+        if match is None:
+            line.branches.append(branch)
+            by_id[branch.branch_id] = branch
+        else:
+            match.count += branch.count
+
+
+def _merge_functions(file_cov: FileCoverage, incoming: list[FunctionCoverage]) -> None:
+    """Merge function execution counts into ``file_cov`` by name, summing counts."""
+    by_name = {f.name: f for f in file_cov.functions}
+    for func in incoming:
+        match = by_name.get(func.name)
+        if match is None:
+            file_cov.functions.append(func)
+            by_name[func.name] = func
+        else:
+            match.execution_count += func.execution_count
+            match.blocks_executed = max(match.blocks_executed, func.blocks_executed)
+            match.blocks_total = max(match.blocks_total, func.blocks_total)
