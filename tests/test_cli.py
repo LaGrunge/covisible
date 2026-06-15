@@ -203,6 +203,21 @@ def test_report_fail_under_new_ignored_without_pr_mode(tmp_path):
     assert "ignored" in r.output
 
 
+def test_report_cobertura_flag_writes_xml(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    xml_path = tmp_path / "coverage.xml"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--cobertura", str(xml_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Cobertura XML written" in result.output
+    text = xml_path.read_text()
+    assert text.startswith('<?xml version="1.0" ?>')
+    assert "<coverage " in text
+    assert "<packages>" in text
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

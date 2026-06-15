@@ -930,6 +930,24 @@ class ReportGenerator:
 
         return file_cov
 
+    def generate_cobertura(self, output_file: Path | None = None) -> Path:
+        """Write a Cobertura XML report for CI tools.
+
+        Writes to ``output_file`` if given, else ``<output_dir>/cobertura.xml``.
+        File paths are relativized the same way as the HTML report.
+        """
+        from covisible.report.cobertura import build_cobertura_xml
+
+        source = self.source_root or self.base_path
+        sources = [str(source)] if source else ["."]
+        xml = build_cobertura_xml(
+            self.coverage, sources=sources, relativize=self._get_relative_path
+        )
+        out = output_file or (self.output_dir / "cobertura.xml")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(xml, encoding="utf-8")
+        return out
+
     def generate_json(self) -> None:
         """Generate JSON report."""
         self.output_dir.mkdir(parents=True, exist_ok=True)

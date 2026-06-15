@@ -204,6 +204,15 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "covisible eye logo.",
 )
 @click.option(
+    "--cobertura",
+    "cobertura_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    metavar="FILE",
+    help="Also write a Cobertura XML report to FILE for CI tools that ingest it "
+    "(Jenkins, GitLab, Azure DevOps, SonarQube).",
+)
+@click.option(
     "--history",
     "history_file",
     type=click.Path(path_type=Path),
@@ -273,6 +282,7 @@ def report(
     show_branches: bool,
     color_thresholds: tuple[float, float],
     badge_path: Path | None,
+    cobertura_path: Path | None,
     history_file: Path | None,
     commit: str | None,
     vcs_branch: str | None,
@@ -441,6 +451,10 @@ def report(
     if output_format in ("json", "both"):
         generator.generate_json()
         console.print(f"✓ JSON report generated: [green]{output}/coverage.json[/]")
+
+    if cobertura_path is not None:
+        generator.generate_cobertura(cobertura_path)
+        console.print(f"✓ Cobertura XML written: [green]{cobertura_path}[/]")
 
     if badge_path is not None:
         from covisible.report.badge import render_coverage_badge
