@@ -30,7 +30,20 @@ def detect_and_parse(path: Path) -> CoverageData:
 @click.group()
 @click.version_option()
 def main() -> None:
-    """Covisible — PR-first code coverage report generator."""
+    """Covisible — PR-first code coverage reports.
+
+    Turn an LCOV or gcov-JSON coverage file into a browsable HTML report that
+    highlights what your change did to coverage, not just the global percentage.
+
+    \b
+    Common commands:
+      report    build the HTML/JSON report (start here)
+      diff      print a CodeCov-style coverage diff in the terminal
+      files     list files by coverage
+      summary   show totals for one coverage file
+
+    Run 'covisible COMMAND --help' for details on any command.
+    """
     pass
 
 
@@ -40,74 +53,94 @@ def main() -> None:
     "-c",
     required=True,
     type=click.Path(exists=True, path_type=Path),
-    help="Current coverage file (gcov JSON or lcov.info)",
+    metavar="FILE",
+    help="Coverage to report on. Format auto-detected: *.json / *.gcov.json is "
+    "read as gcov JSON, anything else as LCOV .info.",
 )
 @click.option(
     "--baseline",
     "-b",
     type=click.Path(exists=True, path_type=Path),
-    help="Baseline coverage file for comparison",
+    metavar="FILE",
+    help="Earlier coverage to compare against (e.g. master before your PR). "
+    "Enables coverage deltas in the report and summary.",
 )
 @click.option(
     "--git-diff",
     "git_diff_range",
     type=str,
-    help="Git diff range (e.g., 'main..HEAD', 'HEAD~1..HEAD')",
+    metavar="RANGE",
+    help="Turn on PR-first mode: report only on lines changed in this git range. "
+    "Runs 'git diff -U0 RANGE' inside --repo. Example: main..HEAD",
 )
 @click.option(
     "--diff-file",
     type=click.Path(exists=True, path_type=Path),
-    help="Path to unified diff file",
+    metavar="FILE",
+    help="PR-first mode from a saved unified diff instead of running git. "
+    "Mutually exclusive with --git-diff.",
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
     default=Path("coverage-report"),
-    help="Output directory for HTML report",
+    metavar="DIR",
+    show_default=True,
+    help="Directory to write the report into (created if missing).",
 )
 @click.option(
     "--format",
     "output_format",
     type=click.Choice(["html", "json", "both"]),
     default="html",
-    help="Output format",
+    show_default=True,
+    help="What to emit: a browsable HTML site, machine-readable JSON, or both.",
 )
 @click.option(
     "--repo",
     type=click.Path(exists=True, path_type=Path),
-    help="Path to git repository (for --git-diff)",
+    metavar="DIR",
+    help="Git repository root. Where --git-diff runs, the default for "
+    "--source-root, and the source of the auto title.",
 )
 @click.option(
     "--source-root",
     "source_root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Directory where the source files referenced by the coverage data live. "
-    "Used to render code when coverage paths are absolute build paths or relative "
-    "to a different root. Defaults to --repo.",
+    metavar="DIR",
+    help="Where the source files actually live on disk, used to render code. "
+    "Resolves relative coverage paths and matches absolute build paths "
+    "(e.g. /home/ci/build/...) by their longest existing suffix. "
+    "Defaults to --repo.",
 )
 @click.option(
     "--title",
     type=str,
     default=None,
-    help="Report title (default: covisible:<project_name>)",
+    metavar="TEXT",
+    help="Heading shown in the report  [default: 'Covisible: <project>'].",
 )
 @click.option(
     "--blame/--no-blame",
     default=False,
-    help="Include git blame analysis for uncovered code",
+    show_default=True,
+    help="Annotate uncovered lines with git blame (who last touched them).",
 )
 @click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
     metavar="GLOB",
-    help="Glob of files to exclude from the report (repeatable, e.g. --exclude '*_test.cpp')",
+    help="Drop files matching this glob from the report. Repeatable, "
+    "e.g. --exclude '*_test.cpp' --exclude 'third_party/*'.",
 )
 @click.option(
     "--ignore-config",
     type=click.Path(exists=True, path_type=Path),
-    help="Path to an ignore config (YAML/JSON) with exclude/include/line_markers",
+    metavar="FILE",
+    help="YAML/JSON file with exclude/include globs and line_markers to ignore "
+    "(an alternative to repeating --exclude).",
 )
 def report(
     current: Path,
@@ -123,7 +156,34 @@ def report(
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
-    """Generate coverage report."""
+    """Generate an HTML/JSON coverage report.
+
+    Reads a coverage file (LCOV .info or gcov JSON, auto-detected) and writes a
+    browsable report to --output. It runs in one of two modes:
+
+    \b
+    - Whole-project (default): coverage for every file in the data.
+    - PR-first (with --git-diff or --diff-file): focuses on the lines your
+      change touched, e.g. "-1.3% coverage, 3 new uncovered lines".
+
+    Add --baseline to show deltas against an earlier run. Source code is read
+    from disk via --source-root (defaulting to --repo); files that cannot be
+    found are shown with coverage but no code, and the count is reported.
+
+    \b
+    Examples:
+      # whole-project HTML report
+      covisible report -c coverage.info -o report/
+
+    \b
+      # PR-first report vs. main, with deltas and code from this checkout
+      covisible report -c new.info -b old.info \\
+          --git-diff main..HEAD --source-root . -o report/
+
+    \b
+      # from a saved diff, emitting both HTML and JSON
+      covisible report -c coverage.json --diff-file pr.diff --format both
+    """
     console.print("[bold blue]Covisible[/] — Generating coverage report...\n")
 
     # Source files default to living under the repo root when not given explicitly.
@@ -266,7 +326,10 @@ def _print_summary(summary: PRCoverageSummary) -> None:
 @main.command()
 @click.argument("coverage_file", type=click.Path(exists=True, path_type=Path))
 def summary(coverage_file: Path) -> None:
-    """Show coverage summary for a file."""
+    """Print line/function/branch totals for one coverage file.
+
+    Format (LCOV .info or gcov JSON) is auto-detected from the filename.
+    """
     cov = detect_and_parse(coverage_file)
 
     console.print(f"[bold blue]Coverage Summary:[/] {coverage_file}\n")
@@ -302,15 +365,21 @@ def summary(coverage_file: Path) -> None:
 
 @main.command()
 @click.argument("coverage_file", type=click.Path(exists=True, path_type=Path))
-@click.option("--limit", "-n", type=int, default=20, help="Number of files to show")
+@click.option(
+    "--limit", "-n", type=int, default=20, show_default=True, help="Max files to show."
+)
 @click.option(
     "--sort",
     type=click.Choice(["coverage", "uncovered", "name"]),
     default="uncovered",
-    help="Sort order",
+    show_default=True,
+    help="Order by: lowest coverage %, most uncovered lines, or path.",
 )
 def files(coverage_file: Path, limit: int, sort: str) -> None:
-    """List files with coverage information."""
+    """List files in a coverage file, ranked by the chosen order.
+
+    Format (LCOV .info or gcov JSON) is auto-detected from the filename.
+    """
     cov = detect_and_parse(coverage_file)
 
     file_list = list(cov.files.values())
@@ -350,19 +419,28 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
     "--baseline", "-b",
     type=click.Path(exists=True, path_type=Path),
     required=True,
-    help="Baseline coverage file to compare against",
+    metavar="FILE",
+    help="Coverage to compare CURRENT against (the 'base').",
 )
-@click.option("--limit", "-n", type=int, default=10, help="Number of impacted files to show")
+@click.option(
+    "--limit", "-n", type=int, default=10, show_default=True,
+    help="Max impacted files to list.",
+)
 @click.option(
     "--markdown",
     "markdown_out",
     type=click.Path(path_type=Path),
-    help="Also write a compact markdown brief (for CI PR comments) to this file",
+    metavar="FILE",
+    help="Also write a compact markdown brief (for pasting into CI PR comments).",
 )
 @click.option(
-    "--base-label", type=str, default="Master", help="Baseline column label in --markdown"
+    "--base-label", type=str, default="Master", show_default=True,
+    help="Column header for the baseline in the --markdown brief.",
 )
-@click.option("--current-label", type=str, default="PR", help="Current column label in --markdown")
+@click.option(
+    "--current-label", type=str, default="PR", show_default=True,
+    help="Column header for CURRENT in the --markdown brief.",
+)
 def diff(
     current: Path,
     baseline: Path,
