@@ -122,6 +122,38 @@ def test_report_badge_color_follows_range(tmp_path):
     assert "#10b981" in badge.read_text()
 
 
+def test_report_history_accumulates_and_renders_trend(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    hist = tmp_path / "history.json"
+
+    # First run seeds the history file: one entry, no trend chart yet.
+    r1 = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--history", str(hist),
+         "--commit", "aaa111", "--branch", "main"],
+    )
+    assert r1.exit_code == 0, r1.output
+    assert hist.exists()
+    data1 = json.loads(hist.read_text())
+    assert len(data1["entries"]) == 1
+    assert data1["entries"][0]["commit"] == "aaa111"
+    assert data1["entries"][0]["branch"] == "main"
+
+    # Second run appends; with two points the trend chart is rendered.
+    r2 = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--history", str(hist),
+         "--commit", "bbb222", "--branch", "main"],
+    )
+    assert r2.exit_code == 0, r2.output
+    data2 = json.loads(hist.read_text())
+    assert len(data2["entries"]) == 2
+    html = (out / "index.html").read_text()
+    assert 'id="trend-chart"' in html
+    assert "Coverage Trend" in html
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

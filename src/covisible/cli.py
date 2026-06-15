@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,34 @@ def _parse_color_range(
     if not (0 <= low < high <= 100):
         raise click.BadParameter("need 0 <= LOW < HIGH <= 100, e.g. '50,80'")
     return low, high
+
+
+def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
+    """Best-effort (short commit, branch) from a git checkout, for trend labels.
+
+    Returns ``(None, None)`` when git is unavailable or the directory is not a
+    repository; a detached HEAD yields a commit but no branch.
+    """
+
+    def _run(args: list[str]) -> str | None:
+        try:
+            proc = subprocess.run(
+                ["git", *args],
+                cwd=str(repo) if repo else None,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        out = proc.stdout.strip()
+        return out if proc.returncode == 0 and out else None
+
+    commit = _run(["rev-parse", "--short", "HEAD"])
+    branch = _run(["rev-parse", "--abbrev-ref", "HEAD"])
+    if branch == "HEAD":  # detached checkout
+        branch = None
+    return commit, branch
 
 
 @main.command()
@@ -173,6 +202,31 @@ def _parse_color_range(
     "covisible eye logo.",
 )
 @click.option(
+    "--history",
+    "history_file",
+    type=click.Path(path_type=Path),
+    default=None,
+    metavar="FILE",
+    help="Append this run to a JSON history file and render a coverage trend "
+    "chart. The file is created if missing and updated in place — commit it or "
+    "cache it in CI to accumulate history across builds.",
+)
+@click.option(
+    "--commit",
+    default=None,
+    metavar="SHA",
+    help="Commit label stored with the --history entry "
+    "[default: auto-detected from --repo].",
+)
+@click.option(
+    "--branch",
+    "vcs_branch",
+    default=None,
+    metavar="NAME",
+    help="Branch label stored with the --history entry "
+    "[default: auto-detected from --repo]. Distinct from --branches.",
+)
+@click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
@@ -201,6 +255,9 @@ def report(
     show_branches: bool,
     color_thresholds: tuple[float, float],
     badge_path: Path | None,
+    history_file: Path | None,
+    commit: str | None,
+    vcs_branch: str | None,
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
@@ -282,6 +339,12 @@ def report(
         console.print(f"✓ Parsed diff file: [green]{diff_file}[/]")
         console.print(f"  {len(diff.files)} files changed")
 
+    # Resolve trend-history identity once, shared by both report modes.
+    if history_file is not None:
+        auto_commit, auto_branch = _git_revision(repo)
+        commit = commit or auto_commit
+        vcs_branch = vcs_branch or auto_branch
+
     if diff:
         analyzer = PRCoverageAnalyzer(
             current=current_cov,
@@ -302,6 +365,9 @@ def report(
             enable_blame=blame,
             show_branches=show_branches,
             color_thresholds=color_thresholds,
+            history_file=history_file,
+            commit=commit,
+            branch=vcs_branch,
         )
     else:
         generator = ReportGenerator(
@@ -314,6 +380,9 @@ def report(
             enable_blame=blame,
             show_branches=show_branches,
             color_thresholds=color_thresholds,
+            history_file=history_file,
+            commit=commit,
+            branch=vcs_branch,
         )
 
         # Print coverage diff summary if baseline provided
