@@ -93,6 +93,35 @@ def test_report_range_rejects_invalid(tmp_path):
         assert result.exit_code != 0, f"expected failure for --range {bad}"
 
 
+def test_report_badge_flag_writes_svg(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    badge = tmp_path / "cov.svg"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--badge", str(badge)]
+    )
+    assert result.exit_code == 0, result.output
+    svg = badge.read_text()
+    assert svg.lstrip().startswith("<svg")
+    # The fixture is 2/3 lines covered -> 67%, amber under the default 50,80.
+    assert "67%" in svg
+    assert "#f59e0b" in svg
+    assert "Coverage badge written" in result.output
+
+
+def test_report_badge_color_follows_range(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    badge = tmp_path / "cov.svg"
+    # 67% is green once HIGH drops to 60.
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--range", "30,60", "--badge", str(badge)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "#10b981" in badge.read_text()
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

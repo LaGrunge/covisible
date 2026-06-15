@@ -163,6 +163,16 @@ def _parse_color_range(
     "cards, the module-table bars, and the sunburst. Example: --range 50,75.",
 )
 @click.option(
+    "--badge",
+    "badge_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    metavar="FILE",
+    help="Also write a shields-style SVG coverage badge to FILE. Shows the "
+    "rounded line-coverage percentage, colored by --range, with the "
+    "covisible eye logo.",
+)
+@click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
@@ -190,6 +200,7 @@ def report(
     blame: bool,
     show_branches: bool,
     color_thresholds: tuple[float, float],
+    badge_path: Path | None,
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
@@ -336,6 +347,19 @@ def report(
     if output_format in ("json", "both"):
         generator.generate_json()
         console.print(f"✓ JSON report generated: [green]{output}/coverage.json[/]")
+
+    if badge_path is not None:
+        from covisible.report.badge import render_coverage_badge
+
+        percent = generator.coverage.line_coverage_percent
+        badge_path.parent.mkdir(parents=True, exist_ok=True)
+        badge_path.write_text(
+            render_coverage_badge(percent, *color_thresholds), encoding="utf-8"
+        )
+        console.print(
+            f"✓ Coverage badge written: [green]{badge_path}[/] "
+            f"([green]{percent:.0f}%[/] line coverage)"
+        )
 
 
 def _print_summary(summary: PRCoverageSummary) -> None:

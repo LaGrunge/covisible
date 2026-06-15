@@ -80,6 +80,8 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 | `--title` | Report title (default: `Covisible: <project>`) |
 | `--blame / --no-blame` | Include git blame analysis for uncovered code |
 | `--branches / --no-branches` | Show branch coverage columns in the report (off by default; only rendered when the coverage data has branch info) |
+| `--range LOW,HIGH` | Coverage color thresholds as percentages: below `LOW` is red, `LOW`–`HIGH` yellow, at or above `HIGH` green (default: `50,80`). Applies to the summary cards, module-table bars, sunburst and treemap |
+| `--badge FILE` | Also write a shields-style SVG coverage badge to `FILE`: rounded line-coverage %, colored by `--range`, with the covisible eye logo |
 | `--exclude GLOB` | Glob of files to exclude (repeatable, e.g. `--exclude '*_test.cpp'`) |
 | `--ignore-config` | Path to an ignore config (YAML/JSON) with `exclude`/`include`/`line_markers` |
 
