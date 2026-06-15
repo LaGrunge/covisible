@@ -47,6 +47,12 @@ covisible report \
 Without `--git-diff`/`--diff-file` you get a whole-project report; with one of
 them the report focuses on new/modified lines.
 
+To render the actual source code, covisible locates each file by the path
+recorded in the coverage data, then by `--source-root` — joining relative paths
+and matching absolute build paths by their longest existing suffix (so a foreign
+build prefix like `/home/ci/build/...` still resolves). Files it cannot find are
+rendered with coverage but no code, and the run prints how many were missing.
+
 ### Generate gcov JSON coverage
 
 ```bash
@@ -67,6 +73,7 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 | `-o, --output` | Output directory for HTML report (default: `coverage-report/`) |
 | `--format` | Output format: `html`, `json`, or `both` (default: `html`) |
 | `--repo` | Path to git repository (for `--git-diff` / title) |
+| `--source-root` | Directory where the source files live, used to render code when coverage paths are absolute build paths or relative to another root (defaults to `--repo`) |
 | `--title` | Report title (default: `Covisible: <project>`) |
 | `--blame / --no-blame` | Include git blame analysis for uncovered code |
 | `--exclude GLOB` | Glob of files to exclude (repeatable, e.g. `--exclude '*_test.cpp'`) |

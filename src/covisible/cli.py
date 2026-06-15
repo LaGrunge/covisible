@@ -79,6 +79,14 @@ def main() -> None:
     help="Path to git repository (for --git-diff)",
 )
 @click.option(
+    "--source-root",
+    "source_root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Directory where the source files referenced by the coverage data live. "
+    "Used to render code when coverage paths are absolute build paths or relative "
+    "to a different root. Defaults to --repo.",
+)
+@click.option(
     "--title",
     type=str,
     default=None,
@@ -109,6 +117,7 @@ def report(
     output: Path,
     output_format: str,
     repo: Path | None,
+    source_root: Path | None,
     title: str,
     blame: bool,
     exclude_patterns: tuple[str, ...],
@@ -116,6 +125,9 @@ def report(
 ) -> None:
     """Generate coverage report."""
     console.print("[bold blue]Covisible[/] — Generating coverage report...\n")
+
+    # Source files default to living under the repo root when not given explicitly.
+    effective_source_root = source_root or repo
 
     # Auto-generate title if not provided
     if title is None:
@@ -178,6 +190,7 @@ def report(
             output_dir=output,
             title=title,
             base_path=repo,
+            source_root=effective_source_root,
             enable_blame=blame,
         )
     else:
@@ -187,6 +200,7 @@ def report(
             output_dir=output,
             title=title,
             base_path=repo,
+            source_root=effective_source_root,
             enable_blame=blame,
         )
 
@@ -197,6 +211,19 @@ def report(
     if output_format in ("html", "both"):
         generator.generate_html()
         console.print(f"\n✓ HTML report generated: [green]{output}/index.html[/]")
+
+        resolved, missing = generator.source_stats
+        if missing:
+            console.print(
+                f"[yellow]⚠ {missing} source file(s) not found "
+                f"([green]{resolved}[/] resolved); rendered coverage without code.[/]"
+            )
+            if not effective_source_root:
+                console.print(
+                    "  [dim]Hint: pass --source-root to point covisible at your sources.[/]"
+                )
+        elif resolved:
+            console.print(f"  Resolved [green]{resolved}[/] source files")
 
     if output_format in ("json", "both"):
         generator.generate_json()

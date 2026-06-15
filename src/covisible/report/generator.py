@@ -50,6 +50,7 @@ class ReportGenerator:
         coverage: CoverageData | None = None,
         baseline: CoverageData | None = None,
         base_path: Path | str | None = None,
+        source_root: Path | str | None = None,
         enable_blame: bool = False,
         history_file: Path | str | None = None,
         commit: str | None = None,
@@ -61,6 +62,12 @@ class ReportGenerator:
         self.coverage = coverage or (analyzer.current if analyzer else CoverageData())
         self.baseline = baseline or (analyzer.baseline if analyzer else None)
         self.base_path = Path(base_path) if base_path else None
+        # Where source files physically live, used only to read code off disk
+        # (distinct from base_path, which relativizes paths for display).
+        self.source_root = Path(source_root) if source_root else None
+        # Track source resolution so the CLI can report misses afterwards.
+        self._resolved_sources: set[str] = set()
+        self._missing_sources: set[str] = set()
         self.enable_blame = enable_blame
         self.history = CoverageHistory(history_file) if history_file else None
         self.commit = commit
@@ -680,12 +687,52 @@ class ReportGenerator:
 
         return path
 
+    def _resolve_source_path(self, path: Path) -> Path | None:
+        """Locate the on-disk source for a coverage path.
+
+        Resolution order:
+          1. the recorded path itself (absolute, or relative to cwd);
+          2. ``source_root`` joined with the longest existing suffix of the
+             recorded path. For a relative path this is simply
+             ``source_root / path``; for an absolute build path it strips
+             leading components one by one (``/home/ci/build/src/foo.c`` →
+             ``src/foo.c``) so a differing build prefix does not matter.
+        Returns the resolved path, or ``None`` if nothing matches.
+        """
+        if path.exists():
+            return path
+
+        root = self.source_root
+        if root is None:
+            return None
+
+        parts = path.parts
+        # For absolute paths parts[0] is the anchor ('/'); skip it. Iterating
+        # from the front yields the longest (most specific) suffix first.
+        start = 1 if path.is_absolute() else 0
+        for i in range(start, len(parts)):
+            candidate = root.joinpath(*parts[i:])
+            if candidate.is_file():
+                return candidate
+        return None
+
     def _read_source_file(self, path: Path) -> list[str]:
-        """Read source file lines."""
-        try:
-            return path.read_text().splitlines()
-        except (FileNotFoundError, PermissionError):
-            return []
+        """Read source file lines, resolving against ``source_root``."""
+        resolved = self._resolve_source_path(path)
+        if resolved is not None:
+            try:
+                lines = resolved.read_text().splitlines()
+                self._resolved_sources.add(str(path))
+                return lines
+            except (FileNotFoundError, PermissionError, UnicodeDecodeError):
+                pass
+        self._missing_sources.add(str(path))
+        return []
+
+    @property
+    def source_stats(self) -> tuple[int, int]:
+        """(resolved, missing) source-file counts after report generation."""
+        return len(self._resolved_sources), len(self._missing_sources)
 
     def _detect_language(self, path: Path) -> str:
         """Detect programming language from file extension."""
