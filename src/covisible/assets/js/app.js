@@ -7,17 +7,30 @@
 
     // ===== Theme Toggle =====
     function initTheme() {
+        const root = document.documentElement;
+        const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+
+        // The inline <head> script applies the initial theme (saved or OS) before
+        // paint; fall back here in case it did not run.
+        if (!root.getAttribute('data-theme')) {
+            const saved = localStorage.getItem('covisible-theme');
+            root.setAttribute('data-theme', saved || (mq && mq.matches ? 'dark' : 'light'));
+        }
+
+        // Follow the OS preference live, but only until the user picks a theme.
+        if (mq && mq.addEventListener) {
+            mq.addEventListener('change', (e) => {
+                if (!localStorage.getItem('covisible-theme')) {
+                    root.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                }
+            });
+        }
+
         const toggle = document.getElementById('theme-toggle');
         if (!toggle) return;
-
-        // Load saved theme or default to dark
-        const savedTheme = localStorage.getItem('covisible-theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-
         toggle.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
+            const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
             localStorage.setItem('covisible-theme', next);
         });
     }

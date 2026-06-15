@@ -288,6 +288,19 @@ def test_report_omit_lines_drops_matching_source_lines(tmp_path):
     assert s1["line_coverage_percent"] == 100.0
 
 
+def test_report_theme_is_os_aware_with_no_fouc(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    r = CliRunner().invoke(main, ["report", "-c", str(cov), "-o", str(out)])
+    assert r.exit_code == 0, r.output
+    html = (out / "index.html").read_text()
+    # The theme is no longer hardcoded; an inline head script applies the saved
+    # or OS-preferred theme before paint (no flash).
+    assert 'data-theme="dark"' not in html
+    assert "prefers-color-scheme" in html
+    assert "covisible-theme" in html
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"
