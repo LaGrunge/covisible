@@ -86,3 +86,54 @@ def test_files_limit_zero_shows_all(tmp_path):
     for name in ("a.c", "b.c", "c.c"):
         assert name in result.output
     assert "more files" not in result.output
+
+
+# Baseline vs current where three files each change coverage -> all impacted.
+_BASE_DIFF = """\
+SF:a.c
+DA:1,1
+DA:2,1
+end_of_record
+SF:b.c
+DA:1,1
+DA:2,1
+end_of_record
+SF:c.c
+DA:1,1
+DA:2,1
+end_of_record
+"""
+_CURR_DIFF = """\
+SF:a.c
+DA:1,1
+DA:2,0
+end_of_record
+SF:b.c
+DA:1,0
+DA:2,0
+end_of_record
+SF:c.c
+DA:1,1
+DA:2,0
+end_of_record
+"""
+
+
+def test_diff_limit_caps_output(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(_BASE_DIFF)
+    curr.write_text(_CURR_DIFF)
+    result = CliRunner().invoke(main, ["diff", str(curr), "-b", str(base), "-n", "1"])
+    assert result.exit_code == 0, result.output
+    assert "more files with changes" in result.output
+
+
+def test_diff_limit_zero_shows_all(tmp_path):
+    base = tmp_path / "base.lcov"
+    curr = tmp_path / "curr.lcov"
+    base.write_text(_BASE_DIFF)
+    curr.write_text(_CURR_DIFF)
+    result = CliRunner().invoke(main, ["diff", str(curr), "-b", str(base), "-n", "0"])
+    assert result.exit_code == 0, result.output
+    assert "more files with changes" not in result.output

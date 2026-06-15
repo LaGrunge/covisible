@@ -429,7 +429,7 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
 )
 @click.option(
     "--limit", "-n", type=int, default=10, show_default=True,
-    help="Max impacted files to list.",
+    help="Max impacted files to list; 0 means no limit (show all).",
 )
 @click.option(
     "--markdown",
@@ -457,6 +457,8 @@ def diff(
     """Show coverage diff between current and baseline (CodeCov style).
 
     Example: covisible diff coverage_new.lcov -b coverage.lcov
+
+    Use -n 0 to list every impacted file without a limit.
     """
     current_cov = detect_and_parse(current)
     baseline_cov = detect_and_parse(baseline)
@@ -706,7 +708,10 @@ def _print_impacted_files(current: CoverageData, baseline: CoverageData, limit: 
     table.add_column("Impacted Files", style="cyan", max_width=50)
     table.add_column("Coverage Δ", justify="right")
 
-    for item in impacted[:limit]:
+    # -n 0 (or negative) disables the cap and shows every impacted file.
+    shown = impacted if limit <= 0 else impacted[:limit]
+
+    for item in shown:
         path = item["path"]
         # Shorten path if too long
         if len(path) > 50:
@@ -724,8 +729,10 @@ def _print_impacted_files(current: CoverageData, baseline: CoverageData, limit: 
 
     console.print(table)
 
-    if len(impacted) > limit:
-        console.print(f"\n[dim]... and {len(impacted) - limit} more files with changes[/]")
+    if len(shown) < len(impacted):
+        console.print(
+            f"\n[dim]... and {len(impacted) - len(shown)} more files with changes[/]"
+        )
 
 
 if __name__ == "__main__":
