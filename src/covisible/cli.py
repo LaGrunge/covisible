@@ -281,7 +281,8 @@ def report(
             missing_paths = generator.missing_sources
             preview = missing_paths[:10]
             for path in preview:
-                console.print(f"    [dim]{path}[/]")
+                # markup=False: a path may contain '[...]' that Rich would parse.
+                console.print(f"    {path}", style="dim", markup=False)
             if len(missing_paths) > len(preview):
                 console.print(f"    [dim]... and {len(missing_paths) - len(preview)} more[/]")
             if not effective_source_root:
