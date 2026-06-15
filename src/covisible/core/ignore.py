@@ -39,6 +39,9 @@ class IgnoreConfig:
     # Line markers to ignore (e.g., "# pragma: no cover", "LCOV_EXCL_LINE")
     line_markers: list[str] = field(default_factory=lambda: list(_DEFAULT_LINE_MARKERS))
 
+    # Regexes; any source line matching one is ignored (content-based omit).
+    omit_line_patterns: list[str] = field(default_factory=list)
+
     # Block markers (start/end pairs)
     block_markers: list[tuple[str, str]] = field(
         default_factory=lambda: list(_DEFAULT_BLOCK_MARKERS)
@@ -51,6 +54,7 @@ class IgnoreConfig:
             exclude_patterns=data.get("exclude", []),
             include_patterns=data.get("include", []),
             line_markers=data.get("line_markers", list(_DEFAULT_LINE_MARKERS)),
+            omit_line_patterns=data.get("omit_lines", []),
             block_markers=[tuple(pair) for pair in data.get("block_markers", [])]
             or list(_DEFAULT_BLOCK_MARKERS),
         )
@@ -87,6 +91,7 @@ class IgnoreFilter:
         self.config = config or IgnoreConfig()
         self._compiled_excludes: list[re.Pattern[str]] = []
         self._compiled_includes: list[re.Pattern[str]] = []
+        self._compiled_omit: list[re.Pattern[str]] = []
         self._compile_patterns()
 
     def _compile_patterns(self) -> None:
@@ -98,6 +103,10 @@ class IgnoreFilter:
         for pattern in self.config.include_patterns:
             regex = fnmatch.translate(pattern)
             self._compiled_includes.append(re.compile(regex))
+
+        # Omit patterns are raw regexes matched against source line content.
+        for pattern in self.config.omit_line_patterns:
+            self._compiled_omit.append(re.compile(pattern))
 
     def should_include_file(self, file_path: Path | str) -> bool:
         """Check if a file should be included in the report.
@@ -170,6 +179,12 @@ class IgnoreFilter:
                     ignored.add(i)
                     break
 
+            # Check content-based omit regexes (--omit-lines).
+            for pattern in self._compiled_omit:
+                if pattern.search(line):
+                    ignored.add(i)
+                    break
+
         return ignored
 
     def filter_coverage_data(self, coverage_data: CoverageData) -> CoverageData:
@@ -222,12 +237,16 @@ class IgnoreFilter:
 def load_ignore_config(
     config_path: Path | str | None = None,
     exclude_patterns: list[str] | None = None,
+    include_patterns: list[str] | None = None,
+    omit_line_patterns: list[str] | None = None,
 ) -> IgnoreConfig:
     """Load ignore configuration from file or create from patterns.
 
     Args:
         config_path: Path to config file (YAML or JSON)
-        exclude_patterns: List of glob patterns to exclude
+        exclude_patterns: Glob patterns to exclude
+        include_patterns: Glob patterns to include (allowlist)
+        omit_line_patterns: Regexes; source lines matching them are ignored
 
     Returns:
         IgnoreConfig object
@@ -236,5 +255,9 @@ def load_ignore_config(
 
     if exclude_patterns:
         config.exclude_patterns.extend(exclude_patterns)
+    if include_patterns:
+        config.include_patterns.extend(include_patterns)
+    if omit_line_patterns:
+        config.omit_line_patterns.extend(omit_line_patterns)
 
     return config

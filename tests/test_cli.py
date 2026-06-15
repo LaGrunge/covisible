@@ -218,6 +218,76 @@ def test_report_cobertura_flag_writes_xml(tmp_path):
     assert "<packages>" in text
 
 
+def test_report_substitute_and_strip_rewrite_paths(tmp_path):
+    cov = tmp_path / "c.info"
+    cov.write_text("SF:/build/src/a.cpp\nDA:1,1\nend_of_record\n")
+    out = tmp_path / "report"
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--format", "json",
+         "--substitute", "s#/build/##"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Rewrote coverage file paths" in result.output
+    data = json.loads((out / "coverage.json").read_text())
+    assert "src/a.cpp" in data["files"]
+
+
+def test_report_substitute_rejects_bad_expression(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--substitute", "nope"]
+    )
+    assert result.exit_code != 0
+
+
+def test_report_strip_then_include_allowlist(tmp_path):
+    cov = tmp_path / "c.info"
+    cov.write_text(
+        "SF:/build/src/keep.cpp\nDA:1,1\nend_of_record\n"
+        "SF:/build/test/drop.cpp\nDA:1,1\nend_of_record\n"
+    )
+    out = tmp_path / "report"
+    result = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--format", "json",
+         "--strip", "1", "--include", "src/*"],
+    )
+    assert result.exit_code == 0, result.output
+    files = set(json.loads((out / "coverage.json").read_text())["files"])
+    assert files == {"src/keep.cpp"}
+
+
+def test_report_omit_lines_drops_matching_source_lines(tmp_path):
+    src = tmp_path / "a.cpp"
+    src.write_text('int x = 1;\nLOG("debug");\nint y = 2;\n')
+    cov = tmp_path / "c.info"
+    cov.write_text(f"SF:{src}\nDA:1,1\nDA:2,0\nDA:3,1\nend_of_record\n")
+    out = tmp_path / "report"
+
+    # Baseline: 2 of 3 lines covered.
+    r0 = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--format", "json"]
+    )
+    assert r0.exit_code == 0, r0.output
+    s0 = json.loads((out / "coverage.json").read_text())["summary"]
+    assert s0["total_lines"] == 3
+    assert s0["covered_lines"] == 2
+
+    # Omit the uncovered LOG line -> 2 of 2 covered.
+    r1 = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--format", "json",
+         "--omit-lines", "LOG"],
+    )
+    assert r1.exit_code == 0, r1.output
+    s1 = json.loads((out / "coverage.json").read_text())["summary"]
+    assert s1["total_lines"] == 2
+    assert s1["covered_lines"] == 2
+    assert s1["line_coverage_percent"] == 100.0
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

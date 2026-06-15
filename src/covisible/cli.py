@@ -262,6 +262,46 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "e.g. --exclude '*_test.cpp' --exclude 'third_party/*'.",
 )
 @click.option(
+    "--include",
+    "include_patterns",
+    multiple=True,
+    metavar="GLOB",
+    help="Keep only files matching this glob (applied after --exclude). "
+    "Repeatable, e.g. --include 'src/*'.",
+)
+@click.option(
+    "--omit-lines",
+    "omit_line_patterns",
+    multiple=True,
+    metavar="REGEXP",
+    help="Ignore source lines matching this Python regex (requires the source "
+    "on disk). Repeatable, e.g. --omit-lines 'assert' --omit-lines 'logger'.",
+)
+@click.option(
+    "--substitute",
+    "substitute_exprs",
+    multiple=True,
+    metavar="s/RE/REPL/",
+    help="Rewrite coverage file paths with a sed-style regex so they match "
+    "source on disk. Repeatable, e.g. --substitute 's#/build/##'.",
+)
+@click.option(
+    "--prefix",
+    "path_prefix",
+    default=None,
+    metavar="PREFIX",
+    help="Strip this leading path PREFIX from coverage file paths.",
+)
+@click.option(
+    "--strip",
+    "strip_depth",
+    type=click.IntRange(0),
+    default=0,
+    show_default=True,
+    metavar="N",
+    help="Strip the first N leading directory levels from coverage file paths.",
+)
+@click.option(
     "--ignore-config",
     type=click.Path(exists=True, path_type=Path),
     metavar="FILE",
@@ -289,6 +329,11 @@ def report(
     fail_under: float | None,
     fail_under_new: float | None,
     exclude_patterns: tuple[str, ...],
+    include_patterns: tuple[str, ...],
+    omit_line_patterns: tuple[str, ...],
+    substitute_exprs: tuple[str, ...],
+    path_prefix: str | None,
+    strip_depth: int,
     ignore_config: Path | None,
 ) -> None:
     """Generate an HTML/JSON coverage report.
@@ -349,12 +394,32 @@ def report(
         baseline_cov = detect_and_parse(baseline)
         console.print(f"✓ Loaded baseline coverage: [green]{baseline}[/]")
 
-    # Apply ignore/exclude rules (file patterns + line markers) if requested.
-    if exclude_patterns or ignore_config:
+    # Rewrite coverage paths (substitute/prefix/strip) so they match source.
+    if substitute_exprs or path_prefix or strip_depth:
+        from covisible.core.pathmap import apply_path_transforms, parse_substitution
+
+        try:
+            subs = [parse_substitution(expr) for expr in substitute_exprs]
+        except ValueError as exc:
+            raise click.BadParameter(str(exc), param_hint="--substitute") from None
+        current_cov = apply_path_transforms(current_cov, subs, path_prefix, strip_depth)
+        if baseline_cov:
+            baseline_cov = apply_path_transforms(
+                baseline_cov, subs, path_prefix, strip_depth
+            )
+        console.print("✓ Rewrote coverage file paths to match source")
+
+    # Apply ignore rules (include/exclude globs, line markers, omit regexes).
+    if exclude_patterns or include_patterns or omit_line_patterns or ignore_config:
         from covisible.core.ignore import IgnoreFilter, load_ignore_config
 
         ignore_filter = IgnoreFilter(
-            load_ignore_config(ignore_config, list(exclude_patterns) or None)
+            load_ignore_config(
+                ignore_config,
+                list(exclude_patterns) or None,
+                list(include_patterns) or None,
+                list(omit_line_patterns) or None,
+            )
         )
         before = current_cov.total_files
         current_cov = ignore_filter.filter_coverage_data(current_cov)
