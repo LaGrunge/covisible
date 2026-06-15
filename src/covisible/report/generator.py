@@ -89,6 +89,7 @@ class ReportGenerator:
         show_branches: bool = False,
         color_thresholds: tuple[float, float] = (50.0, 80.0),
         precision: int = 1,
+        show_trend: bool = True,
         history_file: Path | str | None = None,
         commit: str | None = None,
         branch: str | None = None,
@@ -116,6 +117,8 @@ class ReportGenerator:
         # Decimal places for percentages (CLI --precision), shared by the
         # format_percent filter and the client-side rendering.
         self.precision = precision
+        # Whether to render the trend chart; history is still recorded when off.
+        self.show_trend = show_trend
         self.history = CoverageHistory(history_file) if history_file else None
         self.commit = commit
         self.branch = branch
@@ -290,8 +293,13 @@ class ReportGenerator:
                 branch=self.branch,
             )
             self.history.save()
-            context["trend_data"] = self.history.get_trend_data()
-            context["coverage_delta"] = self.history.get_delta()
+            # Recording always happens; the chart is opt-out via show_trend.
+            if self.show_trend:
+                context["trend_data"] = self.history.get_trend_data()
+                context["coverage_delta"] = self.history.get_delta()
+            else:
+                context["trend_data"] = []
+                context["coverage_delta"] = None
         else:
             context["trend_data"] = []
             context["coverage_delta"] = None

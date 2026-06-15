@@ -330,6 +330,29 @@ def test_report_precision_controls_decimals(tmp_path):
     assert "const covPrecision = 0;" in (out / "index.html").read_text()
 
 
+def test_report_no_trend_hides_chart_but_keeps_recording(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    hist = tmp_path / "h.json"
+
+    # Seed one entry, then a second run with --no-trend.
+    CliRunner().invoke(main, ["report", "-c", str(cov), "-o", str(out), "--history", str(hist)])
+    r = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--history", str(hist), "--no-trend"]
+    )
+    assert r.exit_code == 0, r.output
+    # History keeps recording (now two entries) but the chart is suppressed.
+    assert len(json.loads(hist.read_text())["entries"]) == 2
+    assert 'id="trend-chart"' not in (out / "index.html").read_text()
+
+    # The default (--trend) renders the chart once there are >1 points.
+    r2 = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--history", str(hist)]
+    )
+    assert r2.exit_code == 0, r2.output
+    assert 'id="trend-chart"' in (out / "index.html").read_text()
+
+
 def test_report_reads_config_file_defaults(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

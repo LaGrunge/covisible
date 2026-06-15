@@ -106,6 +106,7 @@ _CONFIG_KEY_MAP = {
     "badge": "badge_path",
     "cobertura": "cobertura_path",
     "history": "history_file",
+    "trend": "show_trend",
     "commit": "commit",
     "branch": "vcs_branch",
     "fail_under": "fail_under",
@@ -309,6 +310,14 @@ def _apply_config(
     "cache it in CI to accumulate history across builds.",
 )
 @click.option(
+    "--trend/--no-trend",
+    "show_trend",
+    default=True,
+    show_default=True,
+    help="Render the coverage trend chart from --history data. Use --no-trend "
+    "to keep recording history but hide the chart.",
+)
+@click.option(
     "--commit",
     default=None,
     metavar="SHA",
@@ -413,6 +422,7 @@ def report(
     history_file: Path | None,
     commit: str | None,
     vcs_branch: str | None,
+    show_trend: bool,
     fail_under: float | None,
     fail_under_new: float | None,
     exclude_patterns: tuple[str, ...],
@@ -553,6 +563,7 @@ def report(
             show_branches=show_branches,
             color_thresholds=color_thresholds,
             precision=precision,
+            show_trend=show_trend,
             history_file=history_file,
             commit=commit,
             branch=vcs_branch,
@@ -569,6 +580,7 @@ def report(
             show_branches=show_branches,
             color_thresholds=color_thresholds,
             precision=precision,
+            show_trend=show_trend,
             history_file=history_file,
             commit=commit,
             branch=vcs_branch,

@@ -88,6 +88,7 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 | `--history FILE` | Append this run to a JSON history file and render a coverage trend chart (commit it / cache it in CI to accumulate history) |
 | `--commit SHA` | Commit label for the `--history` entry (default: auto-detected from `--repo`) |
 | `--branch NAME` | Branch label for the `--history` entry (default: auto-detected from `--repo`; distinct from `--branches`) |
+| `--trend / --no-trend` | Render the coverage trend chart from `--history` data (default on). `--no-trend` keeps recording history but hides the chart |
 | `--fail-under PCT` | Exit with status 1 if overall line coverage is below `PCT` (the report is still written) |
 | `--fail-under-new PCT` | Exit with status 1 if coverage of new/changed lines is below `PCT` (PR mode only) |
 | `--exclude GLOB` | Glob of files to exclude (repeatable, e.g. `--exclude '*_test.cpp'`) |
