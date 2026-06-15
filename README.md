@@ -13,6 +13,9 @@ Covisible generates beautiful, interactive coverage reports focused on what matt
 - **1-click drill-down** — PR → file → function → line
 - **Baseline comparison** — Compare current coverage with previous runs
 
+<img width="2379" height="798" alt="image" src="https://github.com/user-attachments/assets/bbba7bfe-a639-43a7-883b-a479683b4c73" />
+
+
 ## Installation
 
 ```bash
