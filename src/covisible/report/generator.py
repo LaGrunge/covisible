@@ -734,6 +734,11 @@ class ReportGenerator:
         """(resolved, missing) source-file counts after report generation."""
         return len(self._resolved_sources), len(self._missing_sources)
 
+    @property
+    def missing_sources(self) -> list[str]:
+        """Coverage paths whose source could not be located on disk."""
+        return sorted(self._missing_sources)
+
     def _detect_language(self, path: Path) -> str:
         """Detect programming language from file extension."""
         ext_map = {

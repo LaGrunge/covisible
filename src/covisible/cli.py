@@ -278,6 +278,12 @@ def report(
                 f"[yellow]⚠ {missing} source file(s) not found "
                 f"([green]{resolved}[/] resolved); rendered coverage without code.[/]"
             )
+            missing_paths = generator.missing_sources
+            preview = missing_paths[:10]
+            for path in preview:
+                console.print(f"    [dim]{path}[/]")
+            if len(missing_paths) > len(preview):
+                console.print(f"    [dim]... and {len(missing_paths) - len(preview)} more[/]")
             if not effective_source_root:
                 console.print(
                     "  [dim]Hint: pass --source-root to point covisible at your sources.[/]"

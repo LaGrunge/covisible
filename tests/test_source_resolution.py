@@ -79,3 +79,4 @@ def test_read_source_file_tracks_stats(tmp_path: Path) -> None:
 
     resolved, missing = gen.source_stats
     assert (resolved, missing) == (1, 1)
+    assert gen.missing_sources == ["/ci/src/missing.c"]
