@@ -87,6 +87,7 @@ class ReportGenerator:
         source_root: Path | str | None = None,
         enable_blame: bool = False,
         show_branches: bool = False,
+        color_thresholds: tuple[float, float] = (50.0, 80.0),
         history_file: Path | str | None = None,
         commit: str | None = None,
         branch: str | None = None,
@@ -107,6 +108,10 @@ class ReportGenerator:
         # Branch coverage columns are opt-in (CLI --branches); only rendered
         # when both requested and the coverage data actually has branch info.
         self.show_branches = show_branches
+        # Coverage color thresholds (low, high): below low is red, [low, high)
+        # is yellow, and >= high is green. Shared by the Jinja `coverage_class`
+        # filter, the summary cards, the module-table bars, and the sunburst.
+        self.low_threshold, self.high_threshold = color_thresholds
         self.history = CoverageHistory(history_file) if history_file else None
         self.commit = commit
         self.branch = branch
@@ -123,12 +128,11 @@ class ReportGenerator:
         self.env.filters["format_percent"] = lambda x: f"{x:.1f}%"
         self.env.filters["format_delta"] = self._format_delta
 
-    @staticmethod
-    def _coverage_class(percent: float) -> str:
-        """Return CSS class based on coverage percentage."""
-        if percent >= 80:
+    def _coverage_class(self, percent: float) -> str:
+        """Return CSS class for a coverage percentage using configured thresholds."""
+        if percent >= self.high_threshold:
             return "coverage-high"
-        elif percent >= 50:
+        if percent >= self.low_threshold:
             return "coverage-medium"
         return "coverage-low"
 
@@ -197,6 +201,10 @@ class ReportGenerator:
             "has_pr_analysis": self.analyzer is not None,
             # Render branch columns only when opted in AND branch data exists.
             "show_branches": self.show_branches and self.coverage.total_branches > 0,
+            # Color thresholds for client-side rendering (summary cards,
+            # module-table bars, sunburst gradient).
+            "low_threshold": self.low_threshold,
+            "high_threshold": self.high_threshold,
         }
 
         if self.analyzer:

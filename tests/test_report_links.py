@@ -156,6 +156,38 @@ class TestSunburstSync:
         assert sunburst_dirs - tree_keys == set()
 
 
+class TestColorThresholds:
+    """The CLI --range flag must drive every coverage color: the Jinja
+    `coverage_class` filter (impacted files / directory pages) and the JS
+    thresholds used by the summary cards, the module-table bars, and the
+    sunburst gradient."""
+
+    def test_coverage_class_respects_thresholds(self, tmp_path):
+        cov = parse_lcov_string(CURRENT_LCOV)
+        custom = ReportGenerator(
+            coverage=cov, output_dir=tmp_path / "r1", color_thresholds=(50, 75)
+        )
+        assert custom._coverage_class(76) == "coverage-high"
+        assert custom._coverage_class(74) == "coverage-medium"
+        assert custom._coverage_class(49) == "coverage-low"
+
+        # 76% is green at high=75 but only yellow at the default high=80.
+        default = ReportGenerator(coverage=cov, output_dir=tmp_path / "r2")
+        assert default._coverage_class(76) == "coverage-medium"
+
+    def test_thresholds_embedded_in_js(self, tmp_path):
+        cov = parse_lcov_string(CURRENT_LCOV)
+        gen = ReportGenerator(
+            coverage=cov, output_dir=tmp_path / "report", color_thresholds=(50, 75)
+        )
+        gen.generate_html()
+        html = (tmp_path / "report" / "index.html").read_text()
+        assert "const covLow = 50" in html
+        assert "const covHigh = 75" in html
+        # Both the main script and the sunburst component carry the threshold.
+        assert html.count("const covHigh = 75") >= 2
+
+
 class TestBaselineComparisonLinks:
     def test_impacted_links_resolve(self, tmp_path):
         current = parse_lcov_string(CURRENT_LCOV)

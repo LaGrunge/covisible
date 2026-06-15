@@ -47,6 +47,22 @@ def main() -> None:
     pass
 
 
+def _parse_color_range(
+    ctx: click.Context, param: click.Parameter, value: str
+) -> tuple[float, float]:
+    """Parse a ``LOW,HIGH`` color-threshold string into a ``(low, high)`` tuple."""
+    parts = [p.strip() for p in value.split(",")]
+    if len(parts) != 2:
+        raise click.BadParameter("expected two values like '50,80'")
+    try:
+        low, high = float(parts[0]), float(parts[1])
+    except ValueError:
+        raise click.BadParameter("thresholds must be numbers, e.g. '50,80'") from None
+    if not (0 <= low < high <= 100):
+        raise click.BadParameter("need 0 <= LOW < HIGH <= 100, e.g. '50,80'")
+    return low, high
+
+
 @main.command()
 @click.option(
     "--current",
@@ -136,6 +152,17 @@ def main() -> None:
     "data actually contains branch information).",
 )
 @click.option(
+    "--range",
+    "color_thresholds",
+    default="50,80",
+    show_default=True,
+    metavar="LOW,HIGH",
+    callback=_parse_color_range,
+    help="Coverage color thresholds as LOW,HIGH percentages: below LOW is red, "
+    "LOW-HIGH is yellow, at or above HIGH is green. Applies to the summary "
+    "cards, the module-table bars, and the sunburst. Example: --range 50,75.",
+)
+@click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
@@ -162,6 +189,7 @@ def report(
     title: str,
     blame: bool,
     show_branches: bool,
+    color_thresholds: tuple[float, float],
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
@@ -262,6 +290,7 @@ def report(
             source_root=effective_source_root,
             enable_blame=blame,
             show_branches=show_branches,
+            color_thresholds=color_thresholds,
         )
     else:
         generator = ReportGenerator(
@@ -273,6 +302,7 @@ def report(
             source_root=effective_source_root,
             enable_blame=blame,
             show_branches=show_branches,
+            color_thresholds=color_thresholds,
         )
 
         # Print coverage diff summary if baseline provided

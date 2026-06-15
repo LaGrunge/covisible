@@ -349,6 +349,10 @@
     const coverageData = {{ full_tree_data | tojson }};
     const hasBranches = {{ 'true' if show_branches else 'false' }};
     const blameByPath = {{ blame_by_path | tojson }};
+    // Coverage color thresholds (CLI --range): below covLow = red,
+    // [covLow, covHigh) = yellow, >= covHigh = green.
+    const covLow = {{ low_threshold }};
+    const covHigh = {{ high_threshold }};
     {% if baseline_tree_data %}
     const baselineData = {{ baseline_tree_data | tojson }};
     const hasBaseline = true;
@@ -436,8 +440,8 @@
     }
 
     function getCoverageClass(pct) {
-        if (pct >= 80) return 'coverage-high';
-        if (pct >= 50) return 'coverage-medium';
+        if (pct >= covHigh) return 'coverage-high';
+        if (pct >= covLow) return 'coverage-medium';
         return 'coverage-low';
     }
 

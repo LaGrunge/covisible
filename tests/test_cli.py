@@ -63,6 +63,36 @@ def test_report_branches_flag_toggles_columns(tmp_path):
     assert "Branch Coverage" in (out / "index.html").read_text()
 
 
+def test_report_range_flag_sets_thresholds(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+
+    # Default thresholds are 50,80.
+    result = CliRunner().invoke(main, ["report", "-c", str(cov), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "const covHigh = 80" in (out / "index.html").read_text()
+
+    # --range overrides the green cutoff everywhere it is used.
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--range", "50,75"]
+    )
+    assert result.exit_code == 0, result.output
+    html = (out / "index.html").read_text()
+    assert "const covLow = 50" in html
+    assert "const covHigh = 75" in html
+    assert "const covHigh = 80" not in html
+
+
+def test_report_range_rejects_invalid(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    for bad in ["80,50", "50", "foo,bar", "50,150"]:
+        result = CliRunner().invoke(
+            main, ["report", "-c", str(cov), "-o", str(out), "--range", bad]
+        )
+        assert result.exit_code != 0, f"expected failure for --range {bad}"
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

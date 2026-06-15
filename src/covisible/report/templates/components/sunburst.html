@@ -19,39 +19,46 @@
 (function() {
     const sunburstData = {{ treemap_data | tojson }};
     let sunburstRendered = false;
-    
-    // Color stays inside the module table's three coverage tiers (>=80 green,
-    // >=50 amber, else red) so a file reads the same tier in both views — but
-    // within each tier the hue shifts with the exact percentage, so e.g. a 78%
-    // file is a more saturated yellow than a 52% one.
+
+    // Coverage color thresholds (CLI --range), shared with the module table so
+    // a file reads the same tier in both views.
+    const covLow = {{ low_threshold }};
+    const covHigh = {{ high_threshold }};
+
+    // Color stays inside the three coverage tiers (>=covHigh green, >=covLow
+    // amber, else red) — but within each tier the hue shifts with the exact
+    // percentage, so e.g. a near-covHigh file is a more saturated yellow than a
+    // near-covLow one.
     function getCoverageColor(pct, alpha = 0.85) {
         const p = Math.max(0, Math.min(100, pct));
         const mix = (a, b, t) => a + (b - a) * t;
         let h, s, l;
-        if (p < 50) {            // red tier: deep red -> orange-red
-            const t = p / 50;
+        if (p < covLow) {            // red tier: deep red -> orange-red
+            const t = covLow > 0 ? p / covLow : 1;
             h = mix(0, 22, t); s = 88; l = mix(58, 48, t);
-        } else if (p < 80) {     // amber tier: orange -> yellow
-            const t = (p - 50) / 30;
+        } else if (p < covHigh) {    // amber tier: orange -> yellow
+            const span = covHigh - covLow;
+            const t = span > 0 ? (p - covLow) / span : 0;
             h = mix(28, 55, t); s = 92; l = mix(56, 48, t);
-        } else {                 // green tier: light lime -> deep green
+        } else {                     // green tier: light lime -> deep green
             // Coverage clusters at the high end, so ease (t^2) and swing both
             // hue and lightness hard — this is what separates 96% from 100%.
-            const t = Math.pow((p - 80) / 20, 2);
+            const span = 100 - covHigh;
+            const t = span > 0 ? Math.pow((p - covHigh) / span, 2) : 1;
             h = mix(78, 150, t); s = mix(60, 85, t); l = mix(62, 30, t);
         }
         return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
     }
-    
+
     function renderSunburst(data, containerId) {
         const container = document.getElementById(containerId);
         if (!container || !data || !data.children || !data.children.length) {
             if (container) container.innerHTML = '<p class="no-data">No data</p>';
             return;
         }
-        
+
         container.innerHTML = '';
-        
+
         const size = 650;
         const radius = size / 2;
         const innerR = radius * 0.18;
@@ -59,7 +66,7 @@
         // levels the current view actually has (a fixed /5 left a big empty
         // outer band for shallow trees).
         let ringWidth = (radius - innerR) / 5;
-        
+
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('width', size);
         svg.setAttribute('height', size);
@@ -67,11 +74,11 @@
         svg.style.display = 'block';
         svg.style.margin = '0 auto';
         container.appendChild(svg);
-        
+
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('transform', `translate(${radius}, ${radius})`);
         svg.appendChild(g);
-        
+
         // State
         let currentRoot = data;
         let zoomStack = [data];
@@ -79,7 +86,7 @@
         const animDuration = 400; // Animation duration in ms
         const padAngle = 0.008;
         const padRadius = 3;
-        
+
         // Build path index for history navigation
         const nodeIndex = new Map();
         function indexNodes(node, path = '') {
@@ -92,7 +99,7 @@
             }
         }
         indexNodes(data);
-        
+
         // Navigate to a specific path (for history)
         function navigateToPath(pathStr, animate = false) {
             if (!pathStr || pathStr === 'root') {
@@ -102,12 +109,12 @@
                 render(currentRoot, animate, prevNodes);
                 return;
             }
-            
+
             // Build zoom stack by traversing path
             const parts = pathStr.split('/');
             let node = data;
             const newStack = [data];
-            
+
             for (let i = 0; i < parts.length; i++) {
                 const partPath = parts.slice(0, i + 1).join('/');
                 const found = node.children?.find(c => (c.path || c.name) === partPath);
@@ -118,7 +125,7 @@
                     break;
                 }
             }
-            
+
             if (newStack.length > 1) {
                 const prevNodes = animate ? collectNodes(currentRoot) : null;
                 zoomStack = newStack;
@@ -126,7 +133,7 @@
                 render(currentRoot, animate, prevNodes);
             }
         }
-        
+
         // History (back/forward) is owned by the modules controller via the
         // URL hash; the sunburst just follows navigateToPath().
 
@@ -136,7 +143,7 @@
             function collect(node, depth, a0, a1) {
                 if (depth > 4) return;
                 nodes.push({ node, depth, a0, a1 });
-                
+
                 if (node.children && node.children.length) {
                     const total = node.children.reduce((s, c) => s + (c.total_lines || 1), 0);
                     let angle = a0;
@@ -152,30 +159,30 @@
             collect(rootNode, 0, 0, Math.PI * 2);
             return nodes;
         }
-        
+
         // Interpolate between two values
         function lerp(a, b, t) { return a + (b - a) * t; }
-        
+
         // Animate transition between states. fromRW/toRW are the ring widths
         // of the two views, interpolated so thickness changes smoothly.
         function animateTransition(fromNodes, toNodes, fromRW, toRW, onComplete) {
             const startTime = performance.now();
-            
+
             // Build lookup maps
             const fromMap = new Map();
             fromNodes.forEach(n => fromMap.set(n.node.path || n.node.name, n));
             const toMap = new Map();
             toNodes.forEach(n => toMap.set(n.node.path || n.node.name, n));
-            
+
             function animate(currentTime) {
                 const elapsed = currentTime - startTime;
                 const t = Math.min(elapsed / animDuration, 1);
                 const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
-                
+
                 pathElements.forEach((path, key) => {
                     const from = fromMap.get(key);
                     const to = toMap.get(key);
-                    
+
                     if (from && to) {
                         // Interpolate position
                         const a0 = lerp(from.a0, to.a0, easeT);
@@ -185,11 +192,11 @@
 
                         const inner = innerR + (depth - 1) * rw + padRadius;
                         const outer = innerR + depth * rw - padRadius;
-                        
+
                         const arcSpan = a1 - a0;
                         const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
                         const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
-                        
+
                         if (paddedA1 > paddedA0 && inner > 0 && outer > inner) {
                             path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
                             path.style.opacity = '1';
@@ -204,17 +211,17 @@
                         path.style.opacity = (1 - easeT).toString();
                     }
                 });
-                
+
                 if (t < 1) {
                     requestAnimationFrame(animate);
                 } else {
                     if (onComplete) onComplete();
                 }
             }
-            
+
             requestAnimationFrame(animate);
         }
-        
+
         // Delegate navigation to the page controller so the modules table and
         // the sunburst stay in sync; fall back to local zoom if used standalone.
         function emitNavigate(pathStr) {
@@ -244,35 +251,35 @@
                 // Initial render or no animation
                 g.innerHTML = '';
                 pathElements.clear();
-                
+
                 nodes.slice(1).forEach(({ node, depth, a0, a1 }) => {
                     const inner = innerR + (depth - 1) * ringWidth + padRadius;
                     const outer = innerR + depth * ringWidth - padRadius;
-                    
+
                     const arcSpan = a1 - a0;
                     const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
                     const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
-                    
+
                     if (paddedA1 <= paddedA0) return;
-                    
+
                     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                     path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
                     path.setAttribute('fill', getCoverageColor(node.coverage_percent));
                     path.setAttribute('stroke', 'none');
                     path.style.cursor = 'pointer';
-                    
+
                     path.addEventListener('mouseenter', () => {
                         path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
                         showInfo(node);
                     });
-                    
+
                     path.addEventListener('mouseleave', () => {
                         path.setAttribute('fill', getCoverageColor(node.coverage_percent));
                         hideInfo();
                     });
-                    
+
                     path.addEventListener('click', (e) => handleNodeClick(node, e));
-                    
+
                     pathElements.set(node.path || node.name, path);
                     g.appendChild(path);
                 });
@@ -289,7 +296,7 @@
                         const arcSpan = a1 - a0;
                         const paddedA0 = a0 + (arcSpan > padAngle * 2 ? padAngle : 0);
                         const paddedA1 = a1 - (arcSpan > padAngle * 2 ? padAngle : 0);
-                        
+
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         // Start with the target position but invisible
                         if (paddedA1 > paddedA0) {
@@ -299,24 +306,24 @@
                         path.setAttribute('stroke', 'none');
                         path.style.cursor = 'pointer';
                         path.style.opacity = '0';
-                        
+
                         path.addEventListener('mouseenter', () => {
                             path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
                             showInfo(node);
                         });
-                        
+
                         path.addEventListener('mouseleave', () => {
                             path.setAttribute('fill', getCoverageColor(node.coverage_percent));
                             hideInfo();
                         });
-                        
+
                         path.addEventListener('click', (e) => handleNodeClick(node, e));
 
                         pathElements.set(key, path);
                         g.insertBefore(path, g.firstChild);
                     }
                 });
-                
+
                 animateTransition(prevNodes, nodes, prevRingWidth, ringWidth, () => {
                     // Clean up paths that are no longer visible
                     const nodeKeys = new Set(nodes.map(n => n.node.path || n.node.name));
@@ -326,7 +333,7 @@
                             pathElements.delete(key);
                         }
                     });
-                    
+
                     // Ensure all visible paths have opacity 1
                     nodes.slice(1).forEach(({ node }) => {
                         const key = node.path || node.name;
@@ -335,21 +342,21 @@
                     });
                 });
             }
-            
+
             // Center group (clickable) - always recreate
             let centerG = g.querySelector('.center-group');
             if (centerG) centerG.remove();
-            
+
             centerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             centerG.setAttribute('class', 'center-group');
             centerG.style.cursor = zoomStack.length > 1 ? 'pointer' : 'default';
-            
+
             const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             center.setAttribute('r', innerR - 3);
             center.setAttribute('fill', getCoverageColor(rootNode.coverage_percent, 0.9));
             center.setAttribute('class', 'sunburst-center-circle');
             centerG.appendChild(center);
-            
+
             // Center text - just percentage
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('text-anchor', 'middle');
@@ -360,7 +367,7 @@
             text.style.pointerEvents = 'none';
             text.textContent = rootNode.coverage_percent.toFixed(1) + '%';
             centerG.appendChild(text);
-            
+
             // Click handler on entire center group - zoom out to parent dir
             centerG.addEventListener('click', () => {
                 if (zoomStack.length > 1) {
@@ -368,14 +375,14 @@
                     emitNavigate(parent === data ? 'root' : (parent.path || parent.name));
                 }
             });
-            
+
             g.appendChild(centerG);
         }
-        
+
         function arcPath(innerR, outerR, startAngle, endAngle) {
             const start = startAngle - Math.PI / 2;
             const end = endAngle - Math.PI / 2;
-            
+
             const x1 = outerR * Math.cos(start);
             const y1 = outerR * Math.sin(start);
             const x2 = outerR * Math.cos(end);
@@ -384,35 +391,35 @@
             const y3 = innerR * Math.sin(end);
             const x4 = innerR * Math.cos(start);
             const y4 = innerR * Math.sin(start);
-            
+
             const large = (endAngle - startAngle) > Math.PI ? 1 : 0;
-            
+
             return `M${x1},${y1} A${outerR},${outerR} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${innerR},${innerR} 0 ${large} 0 ${x4},${y4} Z`;
         }
-        
+
         function showInfo(node) {
             const info = document.getElementById('sunburst-info');
             if (!info) return;
-            
+
             info.querySelector('.sunburst-info-path').textContent = node.path || node.name;
-            info.querySelector('.sunburst-info-pct').innerHTML = 
+            info.querySelector('.sunburst-info-pct').innerHTML =
                 `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(1)}%</span>`;
-            info.querySelector('.sunburst-info-lines').textContent = 
+            info.querySelector('.sunburst-info-lines').textContent =
                 `${node.covered_lines} / ${node.total_lines} lines covered`;
-            info.querySelector('.sunburst-info-hint').textContent = 
+            info.querySelector('.sunburst-info-hint').textContent =
                 node.is_file ? '🔗 Click to view file' : (node.children?.length ? '🔍 Click to zoom in' : '');
         }
-        
+
         function hideInfo() {
             const info = document.getElementById('sunburst-info');
             if (!info) return;
-            
+
             info.querySelector('.sunburst-info-path').textContent = 'Hover over segments';
             info.querySelector('.sunburst-info-pct').innerHTML = '';
             info.querySelector('.sunburst-info-lines').textContent = '';
             info.querySelector('.sunburst-info-hint').textContent = '';
         }
-        
+
         // Initial render: whole project, then let the controller pull us to
         // whatever directory the table currently shows.
         render(data);
@@ -440,13 +447,13 @@
     function setup() {
         tryRenderSunburst();
     }
-    
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setup);
     } else {
         setup();
     }
-    
+
     window.renderSunburstChart = () => { sunburstRendered = false; tryRenderSunburst(); };
 })();
 </script>
