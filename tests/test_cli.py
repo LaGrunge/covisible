@@ -1,6 +1,7 @@
 """Tests for the command-line interface."""
 
 import json
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -327,6 +328,46 @@ def test_report_precision_controls_decimals(tmp_path):
     )
     assert r3.exit_code == 0, r3.output
     assert "const covPrecision = 0;" in (out / "index.html").read_text()
+
+
+def test_report_reads_config_file_defaults(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    cfg = tmp_path / "cov.toml"
+    cfg.write_text('[report]\nrange = "40,60"\nprecision = 2\n')
+    r = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--config", str(cfg)]
+    )
+    assert r.exit_code == 0, r.output
+    html = (out / "index.html").read_text()
+    assert "const covLow = 40" in html
+    assert "const covHigh = 60" in html
+    assert "const covPrecision = 2;" in html
+
+
+def test_cli_flag_overrides_config_file(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    cfg = tmp_path / "cov.toml"
+    cfg.write_text('[report]\nrange = "40,60"\n')
+    r = CliRunner().invoke(
+        main,
+        ["report", "-c", str(cov), "-o", str(out), "--config", str(cfg), "--range", "10,20"],
+    )
+    assert r.exit_code == 0, r.output
+    html = (out / "index.html").read_text()
+    assert "const covLow = 10" in html
+    assert "const covHigh = 20" in html
+
+
+def test_report_auto_discovers_covisible_toml(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("c.info").write_text(_LCOV)
+        Path(".covisible.toml").write_text("[report]\nprecision = 3\n")
+        r = runner.invoke(main, ["report", "-c", "c.info", "-o", "out"])
+        assert r.exit_code == 0, r.output
+        assert "const covPrecision = 3;" in Path("out/index.html").read_text()
 
 
 def test_report_exclude_drops_files(tmp_path):

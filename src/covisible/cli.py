@@ -92,7 +92,84 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     return commit, branch
 
 
+# Friendly TOML keys (dashes or underscores) -> report option dests.
+_CONFIG_KEY_MAP = {
+    "output": "output",
+    "format": "output_format",
+    "repo": "repo",
+    "source_root": "source_root",
+    "title": "title",
+    "blame": "blame",
+    "branches": "show_branches",
+    "range": "color_thresholds",
+    "precision": "precision",
+    "badge": "badge_path",
+    "cobertura": "cobertura_path",
+    "history": "history_file",
+    "commit": "commit",
+    "branch": "vcs_branch",
+    "fail_under": "fail_under",
+    "fail_under_new": "fail_under_new",
+    "exclude": "exclude_patterns",
+    "include": "include_patterns",
+    "omit_lines": "omit_line_patterns",
+    "substitute": "substitute_exprs",
+    "prefix": "path_prefix",
+    "strip": "strip_depth",
+}
+
+
+def _apply_config(
+    ctx: click.Context, param: click.Parameter, value: Path | None
+) -> Path | None:
+    """Eagerly seed option defaults from a TOML config file.
+
+    Reads ``[report]`` keys (e.g. ``range``, ``exclude``, ``fail_under``) into
+    Click's ``default_map`` so explicit CLI flags still win. Falls back to
+    ``./.covisible.toml`` when ``--config`` is not given.
+    """
+    import tomllib
+
+    path = value
+    if path is None:
+        auto = Path(".covisible.toml")
+        path = auto if auto.exists() else None
+    if path is None:
+        return None
+
+    try:
+        with open(path, "rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise click.BadParameter(f"could not read {path}: {exc}", param_hint="--config") from None
+
+    section = data.get("report", data)
+    if not isinstance(section, dict):
+        return path
+
+    defaults: dict[str, Any] = {}
+    for key, val in section.items():
+        dest = _CONFIG_KEY_MAP.get(str(key).replace("-", "_"))
+        if dest is not None:
+            defaults[dest] = val
+    ctx.default_map = {**(ctx.default_map or {}), **defaults}
+    return path
+
+
 @main.command()
+@click.option(
+    "--config",
+    "config_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    is_eager=True,
+    expose_value=False,
+    callback=_apply_config,
+    metavar="FILE",
+    help="Read option defaults from a TOML file (default: ./.covisible.toml if "
+    "present). CLI flags override the file; the file overrides built-in "
+    "defaults. Put keys under a [report] table.",
+)
 @click.option(
     "--current",
     "-c",
