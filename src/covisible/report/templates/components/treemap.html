@@ -1,129 +1,277 @@
-<!-- Treemap Component (alternative view to the sunburst; same treemap_data) -->
+<!-- Treemap Component: a real squarified treemap kept in sync with the sunburst
+     (same colors, same hover info bar, same navigation, no labels/legend). -->
 <section class="treemap-section">
-    <div class="treemap-container" id="treemap-container">
-        <div class="treemap" id="treemap"></div>
+    <div class="treemap-body">
+        <div class="treemap-chart-fixed" id="treemap-chart"></div>
+        <div class="sunburst-info-bar" id="treemap-info">
+            <div class="sunburst-info-path">Hover over segments</div>
+            <div class="sunburst-info-details">
+                <span class="sunburst-info-pct"></span>
+                <span class="sunburst-info-lines"></span>
+                <span class="sunburst-info-hint"></span>
+            </div>
+        </div>
     </div>
-    <div class="treemap-legend" id="treemap-legend"></div>
 </section>
 
 <script>
 (function() {
     const treemapData = {{ treemap_data | tojson }};
-    // Coverage color thresholds (CLI --range): the same tiers the module table
-    // and the sunburst use, so a cell reads the same color in every view.
+
+    // Coverage color thresholds (CLI --range) — identical to the sunburst, so a
+    // node reads the exact same color in either chart.
     const covLow = {{ low_threshold }};
     const covHigh = {{ high_threshold }};
 
-    const container = document.getElementById('treemap');
+    const container = document.getElementById('treemap-chart');
     if (!container) return;
 
-    function escapeHtml(s) {
-        return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
-            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
-        });
+    const SIZE = 650;        // square viewBox, matches the sunburst footprint
+    const PAD = 3;           // gap between cells (viewBox units)
+    const RADIUS = 5;        // rounded corners
+    const animDuration = 420;
+
+    // Same gradient as the sunburst: three coverage tiers, hue shifting with the
+    // exact percentage inside each tier (so 96% reads brighter than 100%).
+    function getCoverageColor(pct, alpha = 0.85) {
+        const p = Math.max(0, Math.min(100, pct));
+        const mix = (a, b, t) => a + (b - a) * t;
+        let h, s, l;
+        if (p < covLow) {
+            const t = covLow > 0 ? p / covLow : 1;
+            h = mix(0, 22, t); s = 88; l = mix(58, 48, t);
+        } else if (p < covHigh) {
+            const span = covHigh - covLow;
+            const t = span > 0 ? (p - covLow) / span : 0;
+            h = mix(28, 55, t); s = 92; l = mix(56, 48, t);
+        } else {
+            const span = 100 - covHigh;
+            const t = span > 0 ? Math.pow((p - covHigh) / span, 2) : 1;
+            h = mix(78, 150, t); s = mix(60, 85, t); l = mix(62, 30, t);
+        }
+        return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
     }
 
-    function coverageClass(pct) {
-        if (pct >= covHigh) return 'coverage-high';
-        if (pct >= covLow) return 'coverage-medium';
-        return 'coverage-low';
-    }
-
-    function fmt(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
-
-    // Find the tree node for a module path ('' = root). Paths are the same keys
-    // the module table and sunburst navigate by, so the views stay in sync.
+    // Find the tree node for a module path ('' = root). Same keys the module
+    // table and sunburst navigate by, so all three views stay in sync.
     function findNode(path) {
         if (!path) return treemapData;
         const parts = path.split('/');
         let node = treemapData;
         for (let i = 0; i < parts.length; i++) {
             const wanted = parts.slice(0, i + 1).join('/');
-            const next = (node.children || []).find(function(c) {
-                return (c.path || c.name) === wanted;
-            });
-            if (!next) break;  // deepest existing ancestor
+            const next = (node.children || []).find(c => (c.path || c.name) === wanted);
+            if (!next) break;
             node = next;
         }
         return node;
     }
 
-    function renderLegend() {
-        const legend = document.getElementById('treemap-legend');
-        if (!legend) return;
-        legend.innerHTML =
-            '<span class="legend-item"><span class="legend-color coverage-high"></span> \u2265' + fmt(covHigh) + '%</span>' +
-            '<span class="legend-item"><span class="legend-color coverage-medium"></span> ' + fmt(covLow) + '\u2013' + fmt(covHigh) + '%</span>' +
-            '<span class="legend-item"><span class="legend-color coverage-low"></span> &lt;' + fmt(covLow) + '%</span>';
+    // ---- Squarified layout (Bruls, Huizing & van Wijk) ----------------------
+    // Packs the current directory's children into SIZE x SIZE, laying each row
+    // along the shorter side to keep cell aspect ratios close to 1.
+    function worst(areas, side) {
+        let sum = 0, max = -Infinity, min = Infinity;
+        for (const a of areas) { sum += a; if (a > max) max = a; if (a < min) min = a; }
+        const s2 = sum * sum, side2 = side * side;
+        return Math.max((side2 * max) / s2, s2 / (side2 * min));
     }
 
-    // Render the children of the directory at `path`. Clicking a directory
-    // delegates to the page controller (so the table + sunburst follow);
-    // clicking a file opens its page, exactly like the sunburst.
-    function render(path) {
-        const node = findNode(path || '');
-        container.innerHTML = '';
+    function squarify(items, x, y, w, h) {
+        const out = [];
+        const live = items.filter(it => it.value > 0);
+        if (!live.length || w <= 0 || h <= 0) return out;
+        const total = live.reduce((s, it) => s + it.value, 0);
+        const scale = (w * h) / total;
+        const vals = live.map(it => ({ node: it.node, area: it.value * scale }));
 
-        const children = (node.children || []).slice();
-        if (!children.length) {
-            container.innerHTML = '<p class="no-data">No subdirectories to show here.</p>';
-            return;
+        let rx = x, ry = y, rw = w, rh = h, i = 0;
+        while (i < vals.length) {
+            const side = Math.min(rw, rh);
+            const row = [vals[i]];
+            let j = i + 1;
+            while (j < vals.length) {
+                const cur = row.map(r => r.area);
+                if (worst(cur.concat(vals[j].area), side) <= worst(cur, side)) {
+                    row.push(vals[j]); j++;
+                } else break;
+            }
+            const rowArea = row.reduce((s, r) => s + r.area, 0);
+            if (rw >= rh) {
+                const cw = rowArea / rh;
+                let cy = ry;
+                row.forEach(r => { const ch = r.area / cw; out.push({ node: r.node, x: rx, y: cy, w: cw, h: ch }); cy += ch; });
+                rx += cw; rw -= cw;
+            } else {
+                const ch = rowArea / rw;
+                let cx = rx;
+                row.forEach(r => { const cw = r.area / ch; out.push({ node: r.node, x: cx, y: ry, w: cw, h: ch }); cx += cw; });
+                ry += ch; rh -= ch;
+            }
+            i = j;
         }
+        return out;
+    }
 
-        const total = children.reduce(function(s, c) { return s + (c.total_lines || 0); }, 0);
-        if (total === 0) {
-            container.innerHTML = '<p class="no-data">No data</p>';
-            return;
+    // ---- Shared hover info bar (identical markup/classes to the sunburst) ----
+    function showInfo(node) {
+        const info = document.getElementById('treemap-info');
+        if (!info) return;
+        info.querySelector('.sunburst-info-path').textContent = node.path || node.name;
+        info.querySelector('.sunburst-info-pct').innerHTML =
+            `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(1)}%</span>`;
+        info.querySelector('.sunburst-info-lines').textContent =
+            `${node.covered_lines} / ${node.total_lines} lines covered`;
+        info.querySelector('.sunburst-info-hint').textContent =
+            node.is_file ? '🔗 Click to view file' : (node.children?.length ? '🔍 Click to zoom in' : '');
+    }
+
+    function hideInfo() {
+        const info = document.getElementById('treemap-info');
+        if (!info) return;
+        info.querySelector('.sunburst-info-path').textContent = 'Hover over segments';
+        info.querySelector('.sunburst-info-pct').innerHTML = '';
+        info.querySelector('.sunburst-info-lines').textContent = '';
+        info.querySelector('.sunburst-info-hint').textContent = '';
+    }
+
+    // Delegate navigation to the page controller (table + sunburst follow);
+    // files open their page by the same mangled-path convention as the sunburst.
+    function handleNodeClick(node, e) {
+        e.stopPropagation();
+        if (node.is_file && node.full_path) {
+            const fp = node.full_path.replace(/\//g, '_').replace(/\\/g, '_');
+            window.location.href = 'files/' + fp + '.html';
+        } else if (node.children && node.children.length) {
+            if (window.onSunburstNavigate) window.onSunburstNavigate(node.path || node.name);
+            else render(node.path || node.name, true);
         }
-        children.sort(function(a, b) { return (b.total_lines || 0) - (a.total_lines || 0); });
+    }
 
-        children.forEach(function(item) {
-            const cov = item.coverage_percent || 0;
-            const isFile = !!item.is_file;
+    // ---- SVG + animated rendering -------------------------------------------
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
+    svg.setAttribute('width', SIZE);
+    svg.setAttribute('height', SIZE);
+    svg.style.display = 'block';
+    container.appendChild(svg);
 
-            const cell = document.createElement('div');
-            cell.className = 'treemap-cell ' + coverageClass(cov) + (isFile ? ' is-file' : ' has-children');
+    const cells = new Map();      // key -> { rect, node }
+    let prevLayout = new Map();   // key -> {x,y,w,h} from the previous render
+    let rafId = null;
 
-            const percent = (item.total_lines / total) * 100;
-            cell.style.flexBasis = Math.max(percent, 5) + '%';
-            cell.style.flexGrow = String(percent);
+    function inset(r) {
+        return { x: r.x + PAD, y: r.y + PAD, w: Math.max(0, r.w - 2 * PAD), h: Math.max(0, r.h - 2 * PAD) };
+    }
 
-            const icon = isFile ? '\uD83D\uDCC4 ' : '\uD83D\uDCC1 ';
-            cell.innerHTML =
-                '<div class="treemap-cell-name">' + icon + escapeHtml(item.name) + '</div>' +
-                '<div class="treemap-cell-stats">' +
-                    '<span class="treemap-cell-percent">' + cov.toFixed(1) + '%</span>' +
-                    '<span class="treemap-cell-lines">' + (item.uncovered_lines || 0) + ' uncovered</span>' +
-                '</div>';
-            cell.title = (item.path || item.name) + '\n' +
-                (item.covered_lines || 0) + '/' + (item.total_lines || 0) +
-                ' lines covered (' + cov.toFixed(1) + '%)';
+    function applyRect(rect, r) {
+        const b = inset(r);
+        rect.setAttribute('x', b.x);
+        rect.setAttribute('y', b.y);
+        rect.setAttribute('width', b.w);
+        rect.setAttribute('height', b.h);
+    }
 
-            cell.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (isFile) {
-                    if (item.full_path) {
-                        const fp = item.full_path.replace(/\//g, '_').replace(/\\/g, '_');
-                        window.location.href = 'files/' + fp + '.html';
-                    }
-                } else {
-                    const target = item.path || item.name;
-                    if (window.onSunburstNavigate) window.onSunburstNavigate(target);
-                    else render(target);
+    function makeRect(node, r) {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('class', 'treemap-rect');
+        rect.setAttribute('rx', RADIUS);
+        rect.setAttribute('ry', RADIUS);
+        rect.setAttribute('fill', getCoverageColor(node.coverage_percent));
+        applyRect(rect, r);
+        rect.addEventListener('mouseenter', () => {
+            rect.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+            showInfo(node);
+        });
+        rect.addEventListener('mouseleave', () => {
+            rect.setAttribute('fill', getCoverageColor(node.coverage_percent));
+            hideInfo();
+        });
+        rect.addEventListener('click', (e) => handleNodeClick(node, e));
+        return rect;
+    }
+
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    // FLIP-style transition: survivors glide between boxes, new cells fade in,
+    // removed cells fade out.
+    function animate(from, to) {
+        if (rafId) cancelAnimationFrame(rafId);
+        const startT = performance.now();
+        function frame(now) {
+            const t = Math.min((now - startT) / animDuration, 1);
+            const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+            cells.forEach((entry, key) => {
+                const f = from.get(key), g = to.get(key);
+                if (f && g) {
+                    applyRect(entry.rect, {
+                        x: lerp(f.x, g.x, e), y: lerp(f.y, g.y, e),
+                        w: lerp(f.w, g.w, e), h: lerp(f.h, g.h, e),
+                    });
+                    entry.rect.style.opacity = '1';
+                } else if (g && !f) {
+                    entry.rect.style.opacity = e.toString();
+                } else if (f && !g) {
+                    entry.rect.style.opacity = (1 - e).toString();
                 }
             });
-
-            container.appendChild(cell);
-        });
+            if (t < 1) {
+                rafId = requestAnimationFrame(frame);
+            } else {
+                cells.forEach((entry, key) => {
+                    if (!to.has(key)) { entry.rect.remove(); cells.delete(key); }
+                    else { entry.rect.style.opacity = '1'; }
+                });
+                rafId = null;
+            }
+        }
+        rafId = requestAnimationFrame(frame);
     }
 
-    renderLegend();
+    function render(path, doAnimate) {
+        const node = findNode(path || '');
+        const items = (node.children || [])
+            .map(c => ({ node: c, value: c.total_lines || 0 }))
+            .filter(it => it.value > 0)
+            .sort((a, b) => b.value - a.value);
 
-    // Follow controller-driven navigation, mirroring window.sunburstFocus.
-    window.treemapFocus = function(path) { render(path || ''); };
+        const layout = squarify(items, 0, 0, SIZE, SIZE);
+        const next = new Map();
+        layout.forEach(r => next.set(r.node.path || r.node.name, r));
+
+        if (!doAnimate) {
+            cells.forEach(entry => entry.rect.remove());
+            cells.clear();
+            layout.forEach(r => {
+                const key = r.node.path || r.node.name;
+                const rect = makeRect(r.node, r);
+                svg.appendChild(rect);
+                cells.set(key, { rect, node: r.node });
+            });
+            prevLayout = next;
+            return;
+        }
+
+        // Add cells that are new in this view at their target box, faded out.
+        layout.forEach(r => {
+            const key = r.node.path || r.node.name;
+            if (!cells.has(key)) {
+                const rect = makeRect(r.node, r);
+                rect.style.opacity = '0';
+                svg.appendChild(rect);
+                cells.set(key, { rect, node: r.node });
+            }
+        });
+        animate(prevLayout, next);
+        prevLayout = next;
+    }
+
+    // Exposed so the modules controller can focus the treemap on a directory,
+    // mirroring window.sunburstFocus.
+    window.treemapFocus = function(path) { render(path || '', true); };
 
     // Initial render at whatever directory the table currently shows.
-    const start = window.getCurrentModulePath ? window.getCurrentModulePath() : '';
-    render(start || '');
+    const startPath = window.getCurrentModulePath ? window.getCurrentModulePath() : '';
+    render(startPath || '', false);
 })();
 </script>

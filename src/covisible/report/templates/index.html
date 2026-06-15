@@ -874,6 +874,15 @@
             // Re-sync the now-visible chart to the current directory.
             if (view === 'treemap' && window.treemapFocus) window.treemapFocus(currentPath);
             if (view === 'sunburst' && window.sunburstFocus) window.sunburstFocus(currentPath);
+            // Play the morph-in animation on the chart we just revealed.
+            const shown = view === 'treemap' ? tm : sb;
+            if (shown) {
+                shown.classList.remove('entering');
+                void shown.offsetWidth; // reflow so the animation restarts each switch
+                shown.classList.add('entering');
+                shown.addEventListener('animationend',
+                    () => shown.classList.remove('entering'), { once: true });
+            }
         });
     });
 

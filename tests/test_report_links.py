@@ -203,7 +203,20 @@ class TestTreemapView:
         # The Sunburst/Treemap toggle and both views are present.
         assert 'data-view="treemap"' in html
         assert 'id="view-treemap"' in html
-        assert 'id="treemap"' in html
+
+        # A real squarified SVG treemap with its own chart + a hover info bar
+        # that reuses the sunburst's markup/classes.
+        assert 'id="treemap-chart"' in html
+        assert 'id="treemap-info"' in html
+        assert "function squarify(" in html
+
+        # No legend, no labels, no numbers inside cells anymore.
+        assert "treemap-legend" not in html
+        assert "treemap-cell" not in html
+
+        # Colors are identical to the sunburst: both components define the same
+        # getCoverageColor gradient driven by the --range thresholds.
+        assert html.count("function getCoverageColor(") >= 2
 
         # The treemap follows controller navigation and opens file pages by the
         # same mangled-path convention as the sunburst.

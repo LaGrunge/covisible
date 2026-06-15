@@ -1291,142 +1291,41 @@ h3 {
     background: var(--color-uncovered-bg);
 }
 
-/* ===== Treemap ===== */
+/* ===== Treemap (real squarified SVG, styled to match the sunburst) ===== */
 .treemap-section {
     margin-bottom: var(--spacing-xl);
 }
 
-.treemap-container {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-md);
-    min-height: 300px;
-}
-
-.treemap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    min-height: 250px;
-}
-
-.treemap-cell {
+/* Mirror the sunburst's body so the chart + hover info bar line up identically
+   when you switch between the two views. */
+.treemap-body {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: var(--spacing-sm);
-    border-radius: var(--radius-sm);
-    min-width: 80px;
-    min-height: 80px;
-    cursor: default;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.treemap-cell.has-children,
-.treemap-cell.is-file {
-    cursor: pointer;
-}
-
-.treemap-cell.has-children:hover,
-.treemap-cell.is-file:hover {
-    transform: scale(1.02);
-    box-shadow: var(--shadow-md);
-}
-
-.treemap-cell.coverage-high {
-    background: var(--color-covered-bg);
-    border: 1px solid var(--color-covered);
-}
-
-.treemap-cell.coverage-medium {
-    background: #fef3c7;
-    border: 1px solid var(--color-warning);
-}
-
-[data-theme="dark"] .treemap-cell.coverage-medium {
-    background: #451a03;
-}
-
-.treemap-cell.coverage-low {
-    background: var(--color-uncovered-bg);
-    border: 1px solid var(--color-uncovered);
-}
-
-.treemap-cell-name {
-    font-weight: 600;
-    font-size: var(--font-size-sm);
-    color: var(--text-primary);
-    word-break: break-word;
-}
-
-.treemap-cell-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.treemap-cell-percent {
-    font-size: var(--font-size-lg);
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.treemap-cell-lines {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-.treemap-back-btn {
-    margin-bottom: var(--spacing-sm);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-}
-
-.treemap-back-btn:hover {
-    background: var(--accent-color);
-    color: white;
-}
-
-.treemap-legend {
-    display: flex;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-md);
-    justify-content: center;
-}
-
-.legend-item {
-    display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    gap: var(--spacing-sm);
 }
 
-.legend-color {
-    width: 16px;
-    height: 16px;
-    border-radius: var(--radius-sm);
+.treemap-chart-fixed {
+    width: 100%;
+    min-width: 0;
 }
 
-.legend-color.coverage-high {
-    background: var(--color-covered-bg);
-    border: 1px solid var(--color-covered);
+/* The SVG ships with fixed width/height attrs + a viewBox; let it scale to its
+   column while keeping the square ratio (same as the sunburst). */
+.treemap-chart-fixed svg {
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
 }
 
-.legend-color.coverage-medium {
-    background: #fef3c7;
-    border: 1px solid var(--color-warning);
+.treemap-rect {
+    cursor: pointer;
+    transition: opacity 0.15s ease;
 }
 
-.legend-color.coverage-low {
-    background: var(--color-uncovered-bg);
-    border: 1px solid var(--color-uncovered);
+.treemap-rect:hover {
+    stroke: var(--bg-primary, #fff);
+    stroke-width: 2;
 }
 
 /* ===== Sunburst Chart ===== */
@@ -1497,6 +1396,24 @@ h3 {
 
 .chart-view.hidden {
     display: none;
+}
+
+/* Switching Sunburst <-> Treemap: the incoming chart zooms/fades in. Both
+   charts share the same square footprint, so this reads as a morph between
+   the two shapes rather than a hard cut. */
+@keyframes chartViewIn {
+    from { opacity: 0; transform: scale(0.94); }
+    to   { opacity: 1; transform: none; }
+}
+
+.chart-view.entering {
+    animation: chartViewIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chart-view.entering {
+        animation: none;
+    }
 }
 
 .no-data {
