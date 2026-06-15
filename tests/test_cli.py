@@ -36,6 +36,33 @@ def test_report_generates_json(tmp_path):
     assert data["summary"]["total_lines"] == 3
 
 
+_LCOV_BRANCHES = """\
+SF:/proj/src/a.cpp
+DA:10,5
+BRDA:10,0,0,3
+BRDA:10,0,1,0
+end_of_record
+"""
+
+
+def test_report_branches_flag_toggles_columns(tmp_path):
+    cov = tmp_path / "coverage.info"
+    cov.write_text(_LCOV_BRANCHES)
+    out = tmp_path / "report"
+
+    # Default: branch coverage columns are hidden.
+    result = CliRunner().invoke(main, ["report", "-c", str(cov), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "Branch Coverage" not in (out / "index.html").read_text()
+
+    # --branches reveals them (the data has BRDA records).
+    result = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--branches"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Branch Coverage" in (out / "index.html").read_text()
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

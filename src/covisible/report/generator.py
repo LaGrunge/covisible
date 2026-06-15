@@ -24,6 +24,8 @@ def _empty_stats() -> dict[str, Any]:
         "covered_lines": 0,
         "total_functions": 0,
         "covered_functions": 0,
+        "total_branches": 0,
+        "covered_branches": 0,
     }
 
 
@@ -35,6 +37,11 @@ def _finalize_stat_percentages(stats: dict[str, Any]) -> None:
     stats["function_coverage_percent"] = (
         stats["covered_functions"] / stats["total_functions"] * 100
         if stats["total_functions"] > 0
+        else 100.0
+    )
+    stats["branch_coverage_percent"] = (
+        stats["covered_branches"] / stats["total_branches"] * 100
+        if stats["total_branches"] > 0
         else 100.0
     )
 
@@ -52,6 +59,7 @@ class ReportGenerator:
         base_path: Path | str | None = None,
         source_root: Path | str | None = None,
         enable_blame: bool = False,
+        show_branches: bool = False,
         history_file: Path | str | None = None,
         commit: str | None = None,
         branch: str | None = None,
@@ -69,6 +77,9 @@ class ReportGenerator:
         self._resolved_sources: set[str] = set()
         self._missing_sources: set[str] = set()
         self.enable_blame = enable_blame
+        # Branch coverage columns are opt-in (CLI --branches); only rendered
+        # when both requested and the coverage data actually has branch info.
+        self.show_branches = show_branches
         self.history = CoverageHistory(history_file) if history_file else None
         self.commit = commit
         self.branch = branch
@@ -157,6 +168,8 @@ class ReportGenerator:
             "coverage": self.coverage,
             "baseline": self.baseline,
             "has_pr_analysis": self.analyzer is not None,
+            # Render branch columns only when opted in AND branch data exists.
+            "show_branches": self.show_branches and self.coverage.total_branches > 0,
         }
 
         if self.analyzer:
@@ -200,8 +213,12 @@ class ReportGenerator:
             context["impacted_modules"] = self._build_impacted_modules()
             context["impacted_files"] = self._build_impacted_files()
 
-        # Add treemap data
-        context["treemap_data"] = build_treemap_data(self.coverage, self.base_path)
+        # Add treemap data. Share _get_relative_path so the sunburst's node
+        # paths are identical to the SPA tree keys — otherwise clicking a
+        # sunburst slice navigates to a path the module table doesn't have.
+        context["treemap_data"] = build_treemap_data(
+            self.coverage, self.base_path, relativize=self._get_relative_path
+        )
 
         # Add blame data if enabled
         if self.enable_blame:
@@ -278,6 +295,9 @@ class ReportGenerator:
                         "total_functions": file_cov.total_functions,
                         "covered_functions": file_cov.covered_functions,
                         "function_coverage_percent": file_cov.function_coverage_percent,
+                        "total_branches": file_cov.total_branches,
+                        "covered_branches": file_cov.covered_branches,
+                        "branch_coverage_percent": file_cov.branch_coverage_percent,
                     })
                 else:
                     # Directory
@@ -315,6 +335,8 @@ class ReportGenerator:
                     tree[dir_path]["stats"]["covered_lines"] += file_cov.covered_lines
                     tree[dir_path]["stats"]["total_functions"] += file_cov.total_functions
                     tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
+                    tree[dir_path]["stats"]["total_branches"] += file_cov.total_branches
+                    tree[dir_path]["stats"]["covered_branches"] += file_cov.covered_branches
 
         # Calculate percentages
         for _path, node in tree.items():
@@ -535,6 +557,9 @@ class ReportGenerator:
                         "total_functions": file_cov.total_functions,
                         "covered_functions": file_cov.covered_functions,
                         "function_coverage_percent": file_cov.function_coverage_percent,
+                        "total_branches": file_cov.total_branches,
+                        "covered_branches": file_cov.covered_branches,
+                        "branch_coverage_percent": file_cov.branch_coverage_percent,
                     }
                 else:
                     # Directory
@@ -567,6 +592,8 @@ class ReportGenerator:
                     tree[dir_path]["stats"]["covered_lines"] += file_cov.covered_lines
                     tree[dir_path]["stats"]["total_functions"] += file_cov.total_functions
                     tree[dir_path]["stats"]["covered_functions"] += file_cov.covered_functions
+                    tree[dir_path]["stats"]["total_branches"] += file_cov.total_branches
+                    tree[dir_path]["stats"]["covered_branches"] += file_cov.covered_branches
 
         # Calculate percentages
         for _path, node in tree.items():

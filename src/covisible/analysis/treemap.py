@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -51,9 +52,18 @@ class TreemapNode:
 class TreemapBuilder:
     """Builds treemap data from coverage information."""
 
-    def __init__(self, coverage: CoverageData, base_path: Path | str | None = None):
+    def __init__(
+        self,
+        coverage: CoverageData,
+        base_path: Path | str | None = None,
+        relativize: Callable[[Path], Path] | None = None,
+    ):
         self.coverage = coverage
         self.base_path = Path(base_path) if base_path else None
+        # Optional canonical relativizer (e.g. ReportGenerator._get_relative_path).
+        # When given, it is the single source of truth for path keys so the
+        # sunburst hierarchy matches the module table exactly.
+        self.relativize = relativize
         self.root = TreemapNode(name="root", path="")
 
     def _find_common_prefix(self) -> Path | None:
@@ -83,17 +93,36 @@ class TreemapBuilder:
         self._propagate_totals(self.root)
         return self.root
 
+    def _relativize(self, file_path: Path) -> Path:
+        """Relativize a file path for the tree hierarchy.
+
+        Prefers an injected relativizer so the sunburst shares the report's
+        canonical path keys (and stays in sync with the module table). Without
+        one, it falls back to base_path, then the common prefix — but unlike a
+        bare ``base_path or common_prefix`` it still strips the common prefix
+        when base_path is set yet does not actually contain the file.
+        """
+        if self.relativize is not None:
+            return self.relativize(file_path)
+
+        if self.base_path is not None:
+            try:
+                return file_path.relative_to(self.base_path)
+            except ValueError:
+                pass
+
+        prefix = self._find_common_prefix()
+        if prefix is not None:
+            try:
+                return file_path.relative_to(prefix)
+            except ValueError:
+                pass
+
+        return file_path
+
     def _add_file(self, file_path: Path, total_lines: int, covered_lines: int) -> None:
         """Add a file to the treemap."""
-        base_path = self.base_path or self._find_common_prefix()
-
-        if base_path:
-            try:
-                rel_path = file_path.relative_to(base_path)
-            except ValueError:
-                rel_path = file_path
-        else:
-            rel_path = file_path
+        rel_path = self._relativize(file_path)
 
         parts = rel_path.parts
         current = self.root
@@ -156,18 +185,22 @@ class TreemapBuilder:
 
 
 def build_treemap_data(
-    coverage: CoverageData, base_path: Path | str | None = None
+    coverage: CoverageData,
+    base_path: Path | str | None = None,
+    relativize: Callable[[Path], Path] | None = None,
 ) -> dict[str, Any]:
     """Build treemap data from coverage.
 
     Args:
         coverage: Coverage data
         base_path: Base path to make paths relative to
+        relativize: Canonical relativizer shared with the report's module
+            table, so the sunburst node paths match the SPA tree keys exactly.
 
     Returns:
         Dictionary with treemap hierarchy
     """
-    builder = TreemapBuilder(coverage, base_path)
+    builder = TreemapBuilder(coverage, base_path, relativize)
     root = builder.build()
     return root.to_dict()
 

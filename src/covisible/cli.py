@@ -128,6 +128,14 @@ def main() -> None:
     help="Annotate uncovered lines with git blame (who last touched them).",
 )
 @click.option(
+    "--branches/--no-branches",
+    "show_branches",
+    default=False,
+    show_default=True,
+    help="Show branch coverage columns in the report (only when the coverage "
+    "data actually contains branch information).",
+)
+@click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
@@ -153,6 +161,7 @@ def report(
     source_root: Path | None,
     title: str,
     blame: bool,
+    show_branches: bool,
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
@@ -252,6 +261,7 @@ def report(
             base_path=repo,
             source_root=effective_source_root,
             enable_blame=blame,
+            show_branches=show_branches,
         )
     else:
         generator = ReportGenerator(
@@ -262,6 +272,7 @@ def report(
             base_path=repo,
             source_root=effective_source_root,
             enable_blame=blame,
+            show_branches=show_branches,
         )
 
         # Print coverage diff summary if baseline provided

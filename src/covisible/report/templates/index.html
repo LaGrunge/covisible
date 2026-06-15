@@ -62,7 +62,7 @@
         {% set misses_delta = coverage.uncovered_lines - baseline.uncovered_lines %}
         {% set func_delta = coverage.function_coverage_percent - baseline.function_coverage_percent %}
         {% set files_delta = coverage.total_files - baseline.total_files %}
-        
+
         <!-- Coverage Diff Block (CodeCov style) -->
         <div class="coverage-diff-block">
             <div class="diff-header">
@@ -78,7 +78,7 @@
                 <span class="diff-col-label">##</span>
             </div>
             <div class="diff-separator"></div>
-            
+
             <!-- Coverage row (highlighted) -->
             <div class="diff-row diff-row-highlight {% if line_delta >= 0 %}diff-row-positive{% else %}diff-row-negative{% endif %}">
                 <span class="diff-indicator">{% if line_delta >= 0 %}+{% else %}-{% endif %}</span>
@@ -90,7 +90,7 @@
                 </span>
             </div>
             <div class="diff-separator"></div>
-            
+
             <!-- Files -->
             <div class="diff-row">
                 <span class="diff-indicator"></span>
@@ -101,7 +101,7 @@
                     {% if files_delta != 0 %}{% if files_delta > 0 %}+{% endif %}{{ files_delta }}{% endif %}
                 </span>
             </div>
-            
+
             <!-- Lines -->
             <div class="diff-row">
                 <span class="diff-indicator"></span>
@@ -112,7 +112,7 @@
                     {% if lines_delta != 0 %}{% if lines_delta > 0 %}+{% endif %}{{ lines_delta }}{% endif %}
                 </span>
             </div>
-            
+
             <!-- Branches (if available) -->
             {% if baseline.total_branches > 0 or coverage.total_branches > 0 %}
             {% set branches_delta = coverage.total_branches - baseline.total_branches %}
@@ -126,9 +126,9 @@
                 </span>
             </div>
             {% endif %}
-            
+
             <div class="diff-separator"></div>
-            
+
             <!-- Hits -->
             <div class="diff-row">
                 <span class="diff-indicator"></span>
@@ -139,7 +139,7 @@
                     {% if hits_delta != 0 %}{% if hits_delta > 0 %}+{% endif %}{{ hits_delta }}{% endif %}
                 </span>
             </div>
-            
+
             <!-- Misses -->
             <div class="diff-row {% if misses_delta > 0 %}diff-row-negative{% elif misses_delta < 0 %}diff-row-positive{% endif %}">
                 <span class="diff-indicator">{% if misses_delta > 0 %}-{% elif misses_delta < 0 %}+{% endif %}</span>
@@ -150,7 +150,7 @@
                     {% if misses_delta != 0 %}{% if misses_delta > 0 %}+{% endif %}{{ misses_delta }}{% endif %}
                 </span>
             </div>
-            
+
             <!-- Partials (if branches available) -->
             {% if baseline.total_branches > 0 or coverage.total_branches > 0 %}
             {% set baseline_partials = baseline.total_branches - baseline.covered_branches %}
@@ -167,7 +167,7 @@
             </div>
             {% endif %}
         </div>
-        
+
         <!-- Impacted Modules Section -->
         {% if impacted_modules %}
         <div class="impacted-section">
@@ -203,7 +203,7 @@
             </table>
         </div>
         {% endif %}
-        
+
         <!-- Impacted Files Section -->
         {% if impacted_files %}
         <div class="impacted-section">
@@ -254,6 +254,9 @@
                         <th></th>
                         <th colspan="3" class="text-center">Line Coverage</th>
                         <th colspan="3" class="text-center">Function Coverage</th>
+                        {% if show_branches %}
+                        <th colspan="3" class="text-center">Branch Coverage</th>
+                        {% endif %}
                     </tr>
                     <tr class="subheader">
                         <th class="sortable-header" data-sort="name">Name <span class="sort-indicator">↑</span></th>
@@ -263,6 +266,11 @@
                         <th class="text-center sortable-header" data-sort="func-rate">Rate</th>
                         <th class="text-center sortable-header" data-sort="func-total">Total</th>
                         <th class="text-center sortable-header" data-sort="func-hit">Hit</th>
+                        {% if show_branches %}
+                        <th class="text-center sortable-header" data-sort="branch-rate">Rate</th>
+                        <th class="text-center sortable-header" data-sort="branch-total">Total</th>
+                        <th class="text-center sortable-header" data-sort="branch-hit">Hit</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="browser-tbody">
@@ -294,8 +302,8 @@
         </div>
         <div class="files-list" id="files-list">
             {% for file in files %}
-            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html" 
-               class="file-list-item{% if file.is_new_file %} file-new{% endif %}" 
+            <a href="files/{{ file.path|replace('/', '_')|replace('\\', '_') }}.html"
+               class="file-list-item{% if file.is_new_file %} file-new{% endif %}"
                data-path="{{ file.rel_path or file.path }}"
                data-coverage="{{ file.coverage_percent }}"
                data-uncovered="{{ file.uncovered_lines or 0 }}"
@@ -329,6 +337,7 @@
     <!-- Embedded data for JS navigation -->
     <script>
     const coverageData = {{ full_tree_data | tojson }};
+    const hasBranches = {{ 'true' if show_branches else 'false' }};
     {% if baseline_tree_data %}
     const baselineData = {{ baseline_tree_data | tojson }};
     const hasBaseline = true;
@@ -379,34 +388,34 @@
     function formatDelta(delta, isPercent = false) {
         if (delta === null || delta === undefined) return '';
         const val = isPercent ? delta.toFixed(1) + '%' : delta;
-        
+
         // Zero delta - gray
         if (Math.abs(delta) < 0.05) {
             return '<span class="delta-inline delta-zero">— ' + val + '</span>';
         }
-        
+
         const sign = delta >= 0 ? '+' : '';
         const arrow = delta >= 0 ? '▲' : '▼';
-        
+
         // Calculate intensity based on delta magnitude (0-100% maps to 0.5-1.0 opacity)
         const absDelta = Math.abs(delta);
         const intensity = Math.min(0.5 + (absDelta / 100) * 0.5, 1.0);
-        
+
         // Use inline style for variable intensity
-        const color = delta >= 0 
-            ? 'rgba(34, 197, 94, ' + intensity + ')' 
+        const color = delta >= 0
+            ? 'rgba(34, 197, 94, ' + intensity + ')'
             : 'rgba(239, 68, 68, ' + intensity + ')';
-        
+
         return '<span class="delta-inline" style="color: ' + color + '">' + arrow + ' ' + sign + val + '</span>';
     }
-    
+
     function getBaselineStats(path) {
         if (!hasBaseline) return null;
         if (!path) return baselineRootStats;
         if (baselineData[path]) return baselineData[path].stats;
         return null;
     }
-    
+
     function getBaselineFile(path, filename) {
         if (!hasBaseline || !baselineData[path]) return null;
         return baselineData[path].files ? baselineData[path].files[filename] : null;
@@ -417,7 +426,7 @@
         if (pct >= 50) return 'coverage-medium';
         return 'coverage-low';
     }
-    
+
     function navigateToModule(modulePath) {
         // Switch to Modules tab and navigate to the module
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -485,6 +494,24 @@
                 return (a, b, isDir) => {
                     const aVal = isDir ? (a.stats?.covered_functions || 0) : (a.covered_functions || 0);
                     const bVal = isDir ? (b.stats?.covered_functions || 0) : (b.covered_functions || 0);
+                    return aVal - bVal;
+                };
+            case 'branch-rate':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.branch_coverage_percent || 0) : (a.branch_coverage_percent || 0);
+                    const bVal = isDir ? (b.stats?.branch_coverage_percent || 0) : (b.branch_coverage_percent || 0);
+                    return aVal - bVal;
+                };
+            case 'branch-total':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.total_branches || 0) : (a.total_branches || 0);
+                    const bVal = isDir ? (b.stats?.total_branches || 0) : (b.total_branches || 0);
+                    return aVal - bVal;
+                };
+            case 'branch-hit':
+                return (a, b, isDir) => {
+                    const aVal = isDir ? (a.stats?.covered_branches || 0) : (a.covered_branches || 0);
+                    const bVal = isDir ? (b.stats?.covered_branches || 0) : (b.covered_branches || 0);
                     return aVal - bVal;
                 };
             default:
@@ -561,7 +588,7 @@
             history.pushState({ path: path }, '', url);
         }
     }
-    
+
     // Handle browser back/forward
     window.addEventListener('popstate', function(event) {
         const path = event.state ? event.state.path : '';
@@ -573,15 +600,15 @@
         if (path && coverageData[path]) {
             stats = coverageData[path].stats;
         }
-        
+
         const linePct = stats.line_coverage_percent || 0;
         const funcPct = stats.function_coverage_percent || 0;
-        
+
         document.getElementById('stat-line-pct').textContent = formatPercent(linePct);
         document.getElementById('stat-lines').textContent = (stats.covered_lines || 0) + ' / ' + (stats.total_lines || 0);
         document.getElementById('stat-func-pct').textContent = formatPercent(funcPct);
         document.getElementById('stat-files').textContent = stats.file_count || stats.total_files || '-';
-        
+
         // Update color classes
         const lineEl = document.getElementById('stat-line-cov');
         const funcEl = document.getElementById('stat-func-cov');
@@ -592,10 +619,10 @@
     function updateTable(path) {
         const tbody = document.getElementById('browser-tbody');
         const thead = document.getElementById('browser-thead');
-        
+
         let dirs = [];
         let files = [];
-        
+
         if (!path) {
             // Get subdirs from root node (empty key) or top-level dirs
             if (coverageData[''] && coverageData[''].subdirs) {
@@ -635,20 +662,20 @@
 
         const hasFiles = files.length > 0;
         const hasDirs = dirs.length > 0;
-        
+
         updateSortHeaders();
 
         let html = '';
-        
+
         // Parent directory link (..)
         if (path) {
             const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
             html += '<tr class="directory-row parent-row">';
             html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + parentPath + '\'); return false;">📂 ..</a></td>';
-            html += '<td colspan="6" class="text-muted">Parent directory</td>';
+            html += '<td colspan="' + (hasBranches ? 9 : 6) + '" class="text-muted">Parent directory</td>';
             html += '</tr>';
         }
-        
+
         // Directories first
         dirs.forEach(item => {
             const stats = item.stats || {};
@@ -656,18 +683,22 @@
             const funcPct = stats.function_coverage_percent || 0;
             const lineClass = getCoverageClass(linePct);
             const funcClass = getCoverageClass(funcPct);
-            
+            const branchPct = stats.branch_coverage_percent || 0;
+            const branchClass = getCoverageClass(branchPct);
+
             // Get baseline delta for directory
             const baselineStats = getBaselineStats(item.path);
             let lineDelta = '';
             let funcDelta = '';
+            let branchDelta = '';
             if (baselineStats) {
                 const baseLinePct = baselineStats.line_coverage_percent || 0;
                 const baseFuncPct = baselineStats.function_coverage_percent || 0;
                 lineDelta = formatDelta(linePct - baseLinePct, true);
                 funcDelta = formatDelta(funcPct - baseFuncPct, true);
+                branchDelta = formatDelta(branchPct - (baselineStats.branch_coverage_percent || 0), true);
             }
-            
+
             html += '<tr class="directory-row">';
             html += '<td class="dir-name"><a href="#" onclick="navigateTo(\'' + item.path + '\'); return false;">📁 ' + item.name + '</a></td>';
             html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
@@ -678,21 +709,30 @@
             html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span>' + funcDelta + '</div></td>';
             html += '<td class="text-center">' + (stats.total_functions || 0) + '</td>';
             html += '<td class="text-center">' + (stats.covered_functions || 0) + '</td>';
+            if (hasBranches) {
+                html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + branchClass + '" style="width:' + branchPct + '%"></div></div>';
+                html += '<span class="' + branchClass + '">' + formatPercent(branchPct) + '</span>' + branchDelta + '</div></td>';
+                html += '<td class="text-center">' + (stats.total_branches || 0) + '</td>';
+                html += '<td class="text-center">' + (stats.covered_branches || 0) + '</td>';
+            }
             html += '</tr>';
         });
-        
+
         // Then files
         files.forEach(item => {
             const linePct = item.line_coverage_percent || 0;
             const funcPct = item.function_coverage_percent || 0;
             const lineClass = getCoverageClass(linePct);
             const funcClass = getCoverageClass(funcPct);
+            const branchPct = item.branch_coverage_percent || 0;
+            const branchClass = getCoverageClass(branchPct);
             const safePath = item.full_path ? item.full_path.replace(/\//g, '_').replace(/\\/g, '_') : item.name;
-            
+
             // Get baseline delta for file
             const baselineFile = getBaselineFile(path, item.name);
             let lineDelta = '';
             let funcDelta = '';
+            let branchDelta = '';
             let isNewFile = false;
             if (hasBaseline && !baselineFile) {
                 isNewFile = true;
@@ -701,10 +741,11 @@
                 const baseFuncPct = baselineFile.function_coverage_percent || 0;
                 lineDelta = formatDelta(linePct - baseLinePct, true);
                 funcDelta = formatDelta(funcPct - baseFuncPct, true);
+                branchDelta = formatDelta(branchPct - (baselineFile.branch_coverage_percent || 0), true);
             }
-            
+
             const newBadge = isNewFile ? '<span class="badge-new-inline">NEW</span>' : '';
-            
+
             html += '<tr class="directory-row file-row' + (isNewFile ? ' file-new' : '') + '">';
             html += '<td class="dir-name"><a href="files/' + safePath + '.html">' + getFileIcon(item.name) + ' ' + item.name + '</a>' + newBadge + '</td>';
             html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + lineClass + '" style="width:' + linePct + '%"></div></div>';
@@ -715,9 +756,15 @@
             html += '<span class="' + funcClass + '">' + formatPercent(funcPct) + '</span>' + funcDelta + '</div></td>';
             html += '<td class="text-center">' + (item.total_functions || 0) + '</td>';
             html += '<td class="text-center">' + (item.covered_functions || 0) + '</td>';
+            if (hasBranches) {
+                html += '<td><div class="coverage-cell"><div class="lcov-bar"><div class="lcov-bar-fill ' + branchClass + '" style="width:' + branchPct + '%"></div></div>';
+                html += '<span class="' + branchClass + '">' + formatPercent(branchPct) + '</span>' + branchDelta + '</div></td>';
+                html += '<td class="text-center">' + (item.total_branches || 0) + '</td>';
+                html += '<td class="text-center">' + (item.covered_branches || 0) + '</td>';
+            }
             html += '</tr>';
         });
-        
+
         tbody.innerHTML = html;
     }
 
@@ -790,11 +837,11 @@
         btn.addEventListener('click', function() {
             document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            
+
             const list = document.getElementById('files-list');
             const items = Array.from(list.querySelectorAll('.file-list-item'));
             const sortBy = this.dataset.sort;
-            
+
             items.sort((a, b) => {
                 if (sortBy === 'name') {
                     return a.dataset.path.localeCompare(b.dataset.path);
@@ -806,7 +853,7 @@
                     return parseFloat(b.dataset.uncovered) - parseFloat(a.dataset.uncovered);
                 }
             });
-            
+
             items.forEach(item => list.appendChild(item));
         });
     });

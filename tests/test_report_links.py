@@ -46,10 +46,55 @@ BASELINE_LCOV = make_lcov(
 )
 
 
+# Same files as CURRENT_LCOV but with branch data on one line, so
+# total_branches > 0 and the --branches flag has something to render.
+BRANCH_LCOV = (
+    "TN:\n"
+    "SF:/repo/storage/orthus/core/key.cpp\n"
+    "DA:10,5\n"
+    "BRDA:10,0,0,3\n"
+    "BRDA:10,0,1,0\n"
+    "LF:1\nLH:1\n"
+    "end_of_record\n"
+)
+
+
+# Absolute build paths sharing a common prefix. A base_path that does NOT
+# contain them forces the canonical relativizer onto its common-prefix
+# fallback — the case where the sunburst used to keep the full absolute path
+# and desync from the module table.
+ABSOLUTE_LCOV = make_lcov(
+    {
+        "/build/ci/proj/src/core/key.cpp": {1: 1, 2: 0},
+        "/build/ci/proj/src/core/val.cpp": {1: 1, 2: 1},
+        "/build/ci/proj/src/net/sock.cpp": {1: 0, 2: 0},
+    }
+)
+
+
 def extract_coverage_tree_keys(html: str) -> set[str]:
     match = re.search(r"const coverageData = (\{.*?\});\n", html, re.S)
     assert match, "coverageData blob missing from index.html"
     return set(json.loads(match.group(1)).keys())
+
+
+def extract_sunburst_dir_paths(html: str) -> set[str]:
+    """All non-file node paths the sunburst can navigate to."""
+    match = re.search(r"const sunburstData = (\{.*?\});", html, re.S)
+    assert match, "sunburstData blob missing from index.html"
+    root = json.loads(match.group(1))
+
+    paths: set[str] = set()
+
+    def walk(node: dict) -> None:
+        for child in node.get("children", []):
+            if child.get("is_file"):
+                continue
+            paths.add(child["path"])
+            walk(child)
+
+    walk(root)
+    return paths
 
 
 def assert_links_resolve(out: Path) -> None:
@@ -65,6 +110,50 @@ def assert_links_resolve(out: Path) -> None:
     module_targets = set(re.findall(r"navigateToModule\('([^']*)'\)", html))
     dangling = [m for m in module_targets if m and m not in tree_keys]
     assert not dangling, f"navigateToModule targets missing from tree: {dangling}"
+
+
+class TestSunburstSync:
+    """The sunburst must use the same path keys as the module table so that
+    clicking a slice navigates to a directory the table actually has."""
+
+    def test_sunburst_paths_match_tree_keys(self, tmp_path):
+        cov = parse_lcov_string(ABSOLUTE_LCOV)
+        # base_path does not contain the absolute coverage paths, so the
+        # relativizer falls back to the common prefix (/build/ci/proj/src).
+        # The sunburst must follow suit, not emit absolute paths.
+        gen = ReportGenerator(
+            coverage=cov,
+            output_dir=tmp_path / "report",
+            base_path="/some/unrelated/root",
+        )
+        gen.generate_html()
+
+        html = (tmp_path / "report" / "index.html").read_text()
+        tree_keys = extract_coverage_tree_keys(html)
+        sunburst_dirs = extract_sunburst_dir_paths(html)
+
+        assert sunburst_dirs, "expected directory nodes in the sunburst"
+        # Every sunburst directory must be a navigable key in the module tree.
+        dangling = sunburst_dirs - tree_keys
+        assert not dangling, f"sunburst dirs missing from module tree: {dangling}"
+        # No absolute-path leakage — the relativization must have applied.
+        leaked = {p for p in sunburst_dirs if p.startswith("/")}
+        assert not leaked, f"sunburst kept absolute paths: {leaked}"
+        # Concretely: the relative module dirs are present.
+        assert {"core", "net"} <= sunburst_dirs
+
+    def test_sunburst_paths_match_tree_keys_no_base_path(self, tmp_path):
+        # Without base_path, both table and sunburst use the common prefix;
+        # they must still agree.
+        cov = parse_lcov_string(ABSOLUTE_LCOV)
+        gen = ReportGenerator(coverage=cov, output_dir=tmp_path / "report")
+        gen.generate_html()
+
+        html = (tmp_path / "report" / "index.html").read_text()
+        tree_keys = extract_coverage_tree_keys(html)
+        sunburst_dirs = extract_sunburst_dir_paths(html)
+
+        assert sunburst_dirs - tree_keys == set()
 
 
 class TestBaselineComparisonLinks:
@@ -230,6 +319,43 @@ class TestMarkdownBrief:
         current = parse_lcov_string(CURRENT_LCOV)
         md = render_diff_markdown(current, current)
         assert "Branches" not in md
+
+
+class TestBranchColumnsFlag:
+    """Branch coverage columns in the Modules table are opt-in via --branches."""
+
+    def test_branches_hidden_by_default(self, tmp_path):
+        cov = parse_lcov_string(BRANCH_LCOV)
+        gen = ReportGenerator(coverage=cov, output_dir=tmp_path / "report")
+        gen.generate_html()
+
+        html = (tmp_path / "report" / "index.html").read_text()
+        assert "Branch Coverage" not in html
+        assert "const hasBranches = false" in html
+
+    def test_branches_shown_with_flag(self, tmp_path):
+        cov = parse_lcov_string(BRANCH_LCOV)
+        gen = ReportGenerator(
+            coverage=cov, output_dir=tmp_path / "report", show_branches=True
+        )
+        gen.generate_html()
+
+        html = (tmp_path / "report" / "index.html").read_text()
+        assert "Branch Coverage" in html
+        assert "const hasBranches = true" in html
+
+    def test_flag_is_noop_without_branch_data(self, tmp_path):
+        # CURRENT_LCOV has no BRDA records, so there is nothing to show even
+        # when the flag is on — columns must stay hidden (no empty 100% column).
+        cov = parse_lcov_string(CURRENT_LCOV)
+        gen = ReportGenerator(
+            coverage=cov, output_dir=tmp_path / "report", show_branches=True
+        )
+        gen.generate_html()
+
+        html = (tmp_path / "report" / "index.html").read_text()
+        assert "Branch Coverage" not in html
+        assert "const hasBranches = false" in html
 
 
 class TestExceptionBranchParsing:

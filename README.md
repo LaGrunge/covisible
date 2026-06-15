@@ -79,6 +79,7 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 | `--source-root` | Directory where the source files live, used to render code when coverage paths are absolute build paths or relative to another root (defaults to `--repo`) |
 | `--title` | Report title (default: `Covisible: <project>`) |
 | `--blame / --no-blame` | Include git blame analysis for uncovered code |
+| `--branches / --no-branches` | Show branch coverage columns in the report (off by default; only rendered when the coverage data has branch info) |
 | `--exclude GLOB` | Glob of files to exclude (repeatable, e.g. `--exclude '*_test.cpp'`) |
 | `--ignore-config` | Path to an ignore config (YAML/JSON) with `exclude`/`include`/`line_markers` |
 
