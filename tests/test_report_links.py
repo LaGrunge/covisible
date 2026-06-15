@@ -331,6 +331,7 @@ class TestBranchColumnsFlag:
 
         html = (tmp_path / "report" / "index.html").read_text()
         assert "Branch Coverage" not in html
+        assert 'id="stat-branch-pct"' not in html
         assert "const hasBranches = false" in html
 
     def test_branches_shown_with_flag(self, tmp_path):
@@ -342,6 +343,8 @@ class TestBranchColumnsFlag:
 
         html = (tmp_path / "report" / "index.html").read_text()
         assert "Branch Coverage" in html
+        # The top summary card (next to Line/Function Coverage) is present too.
+        assert 'id="stat-branch-pct"' in html
         assert "const hasBranches = true" in html
 
     def test_flag_is_noop_without_branch_data(self, tmp_path):
@@ -355,6 +358,7 @@ class TestBranchColumnsFlag:
 
         html = (tmp_path / "report" / "index.html").read_text()
         assert "Branch Coverage" not in html
+        assert 'id="stat-branch-pct"' not in html
         assert "const hasBranches = false" in html
 
 

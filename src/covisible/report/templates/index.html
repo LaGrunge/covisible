@@ -21,6 +21,16 @@
                 <div class="stat-value" id="stat-files">{{ coverage.total_files }}</div>
                 <div class="stat-label">Files</div>
             </div>
+            {% if show_branches %}
+            <div class="stat-item" id="stat-branch-cov">
+                <div class="stat-value" id="stat-branch-pct">{{ coverage.branch_coverage_percent|format_percent }}</div>
+                <div class="stat-label">Branch Coverage</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="stat-branches">{{ coverage.covered_branches }} / {{ coverage.total_branches }}</div>
+                <div class="stat-label">Branches</div>
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -352,7 +362,10 @@
         function_coverage_percent: {{ coverage.function_coverage_percent }},
         covered_functions: {{ coverage.covered_functions }},
         total_functions: {{ coverage.total_functions }},
-        total_files: {{ coverage.total_files }}
+        total_files: {{ coverage.total_files }},
+        branch_coverage_percent: {{ coverage.branch_coverage_percent }},
+        covered_branches: {{ coverage.covered_branches }},
+        total_branches: {{ coverage.total_branches }}
     };
     {% if baseline %}
     const baselineRootStats = {
@@ -614,6 +627,19 @@
         const funcEl = document.getElementById('stat-func-cov');
         lineEl.className = 'stat-item ' + getCoverageClass(linePct);
         funcEl.className = 'stat-item ' + getCoverageClass(funcPct);
+
+        // Branch coverage card — only present in --branches mode.
+        const branchPctEl = document.getElementById('stat-branch-pct');
+        if (branchPctEl) {
+            const branchPct = stats.branch_coverage_percent || 0;
+            branchPctEl.textContent = formatPercent(branchPct);
+            const branchesEl = document.getElementById('stat-branches');
+            if (branchesEl) {
+                branchesEl.textContent = (stats.covered_branches || 0) + ' / ' + (stats.total_branches || 0);
+            }
+            const branchEl = document.getElementById('stat-branch-cov');
+            if (branchEl) branchEl.className = 'stat-item ' + getCoverageClass(branchPct);
+        }
     }
 
     function updateTable(path) {
