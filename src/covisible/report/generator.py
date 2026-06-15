@@ -88,6 +88,7 @@ class ReportGenerator:
         enable_blame: bool = False,
         show_branches: bool = False,
         color_thresholds: tuple[float, float] = (50.0, 80.0),
+        precision: int = 1,
         history_file: Path | str | None = None,
         commit: str | None = None,
         branch: str | None = None,
@@ -112,6 +113,9 @@ class ReportGenerator:
         # is yellow, and >= high is green. Shared by the Jinja `coverage_class`
         # filter, the summary cards, the module-table bars, and the sunburst.
         self.low_threshold, self.high_threshold = color_thresholds
+        # Decimal places for percentages (CLI --precision), shared by the
+        # format_percent filter and the client-side rendering.
+        self.precision = precision
         self.history = CoverageHistory(history_file) if history_file else None
         self.commit = commit
         self.branch = branch
@@ -125,7 +129,7 @@ class ReportGenerator:
     def _register_filters(self) -> None:
         """Register custom Jinja2 filters."""
         self.env.filters["coverage_class"] = self._coverage_class
-        self.env.filters["format_percent"] = lambda x: f"{x:.1f}%"
+        self.env.filters["format_percent"] = lambda x: f"{x:.{self.precision}f}%"
         self.env.filters["format_delta"] = self._format_delta
 
     def _coverage_class(self, percent: float) -> str:
@@ -205,6 +209,10 @@ class ReportGenerator:
             # module-table bars, sunburst gradient).
             "low_threshold": self.low_threshold,
             "high_threshold": self.high_threshold,
+            # Decimal places for percentages (CLI --precision); pct_fmt is a
+            # printf spec for Jinja's `format` filter on bare delta numbers.
+            "precision": self.precision,
+            "pct_fmt": f"%.{self.precision}f",
         }
 
         if self.analyzer:
@@ -724,6 +732,8 @@ class ReportGenerator:
             "source_lines": source_lines,
             "added_lines": pr_cov.added_lines,
             "coverage": coverage_with_demangled,
+            "precision": self.precision,
+            "pct_fmt": f"%.{self.precision}f",
             "language": self._detect_language(path),
         }
 
@@ -766,6 +776,8 @@ class ReportGenerator:
             "added_lines": set(),
             "coverage": coverage_with_demangled,
             "baseline_coverage": baseline_file_cov,
+            "precision": self.precision,
+            "pct_fmt": f"%.{self.precision}f",
             "language": self._detect_language(path),
         }
 

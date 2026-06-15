@@ -301,6 +301,34 @@ def test_report_theme_is_os_aware_with_no_fouc(tmp_path):
     assert "covisible-theme" in html
 
 
+def test_report_precision_controls_decimals(tmp_path):
+    cov = _write_lcov(tmp_path)  # 2 of 3 lines -> 66.666...%
+    out = tmp_path / "report"
+
+    # Default precision is one decimal.
+    r1 = CliRunner().invoke(main, ["report", "-c", str(cov), "-o", str(out)])
+    assert r1.exit_code == 0, r1.output
+    html1 = (out / "index.html").read_text()
+    assert "66.7%" in html1
+    assert "const covPrecision = 1;" in html1
+
+    # --precision 3 widens decimals everywhere (server filter + JS constant).
+    r2 = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--precision", "3"]
+    )
+    assert r2.exit_code == 0, r2.output
+    html2 = (out / "index.html").read_text()
+    assert "66.667%" in html2
+    assert "const covPrecision = 3;" in html2
+
+    # --precision 0 renders integers.
+    r3 = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--precision", "0"]
+    )
+    assert r3.exit_code == 0, r3.output
+    assert "const covPrecision = 0;" in (out / "index.html").read_text()
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"

@@ -338,11 +338,11 @@
                         {% set abs_delta = file.coverage_delta|abs %}
                         {% set intensity = [0.5 + (abs_delta / 100) * 0.5, 1.0]|min %}
                         {% if abs_delta < 0.05 %}
-                    <span class="file-list-delta delta-zero">— {{ "%.1f"|format(abs_delta) }}%</span>
+                    <span class="file-list-delta delta-zero">— {{ pct_fmt|format(abs_delta) }}%</span>
                         {% elif file.coverage_delta >= 0 %}
-                    <span class="file-list-delta" style="color: rgba(34, 197, 94, {{ intensity }})">▲ +{{ "%.1f"|format(abs_delta) }}%</span>
+                    <span class="file-list-delta" style="color: rgba(34, 197, 94, {{ intensity }})">▲ +{{ pct_fmt|format(abs_delta) }}%</span>
                         {% else %}
-                    <span class="file-list-delta" style="color: rgba(239, 68, 68, {{ intensity }})">▼ -{{ "%.1f"|format(abs_delta) }}%</span>
+                    <span class="file-list-delta" style="color: rgba(239, 68, 68, {{ intensity }})">▼ -{{ pct_fmt|format(abs_delta) }}%</span>
                         {% endif %}
                     {% elif file.is_new_file %}
                     <span class="file-list-delta delta-new">NEW</span>
@@ -362,6 +362,8 @@
     // [covLow, covHigh) = yellow, >= covHigh = green.
     const covLow = {{ low_threshold }};
     const covHigh = {{ high_threshold }};
+    // Decimal places for percentages (CLI --precision).
+    const covPrecision = {{ precision }};
     {% if baseline_tree_data %}
     const baselineData = {{ baseline_tree_data | tojson }};
     const hasBaseline = true;
@@ -414,7 +416,7 @@
 
     function formatDelta(delta, isPercent = false) {
         if (delta === null || delta === undefined) return '';
-        const val = isPercent ? delta.toFixed(1) + '%' : delta;
+        const val = isPercent ? delta.toFixed(covPrecision) + '%' : delta;
 
         // Zero delta - gray
         if (Math.abs(delta) < 0.05) {
@@ -464,7 +466,7 @@
     }
 
     function formatPercent(val) {
-        return val.toFixed(1) + '%';
+        return val.toFixed(covPrecision) + '%';
     }
 
     // Sorting state

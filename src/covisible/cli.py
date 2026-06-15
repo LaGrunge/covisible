@@ -194,6 +194,15 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "cards, the module-table bars, and the sunburst. Example: --range 50,75.",
 )
 @click.option(
+    "--precision",
+    type=click.IntRange(0, 4),
+    default=1,
+    show_default=True,
+    metavar="N",
+    help="Number of decimal places shown for coverage percentages everywhere "
+    "in the report (summary cards, tables, charts).",
+)
+@click.option(
     "--badge",
     "badge_path",
     type=click.Path(path_type=Path),
@@ -321,6 +330,7 @@ def report(
     blame: bool,
     show_branches: bool,
     color_thresholds: tuple[float, float],
+    precision: int,
     badge_path: Path | None,
     cobertura_path: Path | None,
     history_file: Path | None,
@@ -465,6 +475,7 @@ def report(
             enable_blame=blame,
             show_branches=show_branches,
             color_thresholds=color_thresholds,
+            precision=precision,
             history_file=history_file,
             commit=commit,
             branch=vcs_branch,
@@ -480,6 +491,7 @@ def report(
             enable_blame=blame,
             show_branches=show_branches,
             color_thresholds=color_thresholds,
+            precision=precision,
             history_file=history_file,
             commit=commit,
             branch=vcs_branch,

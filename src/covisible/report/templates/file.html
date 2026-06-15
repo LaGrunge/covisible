@@ -51,7 +51,7 @@
                 {% if baseline_coverage %}
                 {% set delta = coverage.line_coverage_percent - baseline_coverage.line_coverage_percent %}
                 <span class="stat-delta {% if delta >= 0 %}delta-positive{% else %}delta-negative{% endif %}">
-                    {% if delta >= 0 %}▲{% else %}▼{% endif %}{{ "%.1f"|format(delta|abs) }}%
+                    {% if delta >= 0 %}▲{% else %}▼{% endif %}{{ pct_fmt|format(delta|abs) }}%
                 </span>
                 {% endif %}
             </span>
@@ -75,8 +75,8 @@
                 {# Uncovered functions first (is_covered False sorts before True),
                    alphabetical within each group — sort is stable. #}
                 {% for func in coverage.functions|sort(attribute='demangled_name')|sort(attribute='is_covered') %}
-                <div class="func-item {% if func.is_covered %}func-item-covered{% else %}func-item-uncovered{% endif %}" 
-                     data-line="{{ func.start_line }}" 
+                <div class="func-item {% if func.is_covered %}func-item-covered{% else %}func-item-uncovered{% endif %}"
+                     data-line="{{ func.start_line }}"
                      data-name="{{ (func.demangled_name or func.name)|lower }}">
                     <span class="func-status-dot">●</span>
                     <span class="func-item-name">{{ func.demangled_name or func.name }}</span>
@@ -86,7 +86,7 @@
             </div>
         </div>
         <span class="func-stats">
-            <span class="func-stat-covered">{{ coverage.covered_functions }}</span> / 
+            <span class="func-stat-covered">{{ coverage.covered_functions }}</span> /
             <span class="func-stat-total">{{ coverage.total_functions }}</span> covered
         </span>
     </div>
@@ -196,24 +196,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.line-code code').forEach(function(block) {
         hljs.highlightElement(block);
     });
-    
+
     // Diff/Full view toggle
     const btnDiff = document.getElementById('btn-diff');
     const btnFull = document.getElementById('btn-full');
     const sourceTable = document.getElementById('source-table');
-    
+
     function applyViewMode(mode) {
         if (!sourceTable) return;
-        
+
         const lines = sourceTable.querySelectorAll('.source-line');
-        
+
         if (mode === 'full') {
             // Full view - show all lines
             lines.forEach(line => line.classList.remove('diff-hidden'));
             removeDiffSeparators();
             return;
         }
-        
+
         // Diff mode - show only changed lines and context (3 lines before/after)
         const changedIndices = [];
         lines.forEach((line, idx) => {
@@ -221,14 +221,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 changedIndices.push(idx);
             }
         });
-        
+
         // If no changes, show all lines
         if (changedIndices.length === 0) {
             lines.forEach(line => line.classList.remove('diff-hidden'));
             removeDiffSeparators();
             return;
         }
-        
+
         // Hide lines not in context of changes
         lines.forEach((line, idx) => {
             let showLine = false;
@@ -238,25 +238,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 }
             }
-            
+
             if (showLine) {
                 line.classList.remove('diff-hidden');
             } else {
                 line.classList.add('diff-hidden');
             }
         });
-        
+
         // Add separators between non-contiguous chunks
         addDiffSeparators();
     }
-    
+
     function addDiffSeparators() {
         removeDiffSeparators();
         if (!sourceTable) return;
-        
+
         const lines = Array.from(sourceTable.querySelectorAll('.source-line'));
         let prevVisibleIdx = -999;
-        
+
         lines.forEach((line, idx) => {
             if (!line.classList.contains('diff-hidden')) {
                 if (prevVisibleIdx >= 0 && idx - prevVisibleIdx > 1) {
@@ -270,12 +270,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     function removeDiffSeparators() {
         if (!sourceTable) return;
         sourceTable.querySelectorAll('.diff-separator-row').forEach(el => el.remove());
     }
-    
+
     // Bind click handlers
     if (btnDiff) {
         btnDiff.addEventListener('click', function() {
@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function() {
             applyViewMode('diff');
         });
     }
-    
+
     if (btnFull) {
         btnFull.addEventListener('click', function() {
             if (btnDiff) btnDiff.classList.remove('active');
@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
             applyViewMode('full');
         });
     }
-    
+
     // Initialize diff view if buttons exist
     if (btnDiff) {
         applyViewMode('diff');
@@ -301,15 +301,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function search and dropdown
     const funcSearch = document.getElementById('func-search');
     const funcDropdown = document.getElementById('func-dropdown');
-    
+
     if (funcSearch && funcDropdown) {
         const funcItems = funcDropdown.querySelectorAll('.func-item');
-        
+
         // Show dropdown on focus
         funcSearch.addEventListener('focus', function() {
             funcDropdown.classList.remove('hidden');
         });
-        
+
         // Filter functions on input
         funcSearch.addEventListener('input', function() {
             const query = this.value.toLowerCase();
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             funcDropdown.classList.remove('hidden');
         });
-        
+
         // Click on function item
         funcItems.forEach(function(item) {
             item.addEventListener('click', function() {
@@ -336,14 +336,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
-        
+
         // Hide dropdown when clicking outside
         document.addEventListener('click', function(e) {
             if (!funcSearch.contains(e.target) && !funcDropdown.contains(e.target)) {
                 funcDropdown.classList.add('hidden');
             }
         });
-        
+
         // Keyboard navigation
         funcSearch.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {

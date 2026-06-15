@@ -22,6 +22,7 @@
     // node reads the exact same color in either chart.
     const covLow = {{ low_threshold }};
     const covHigh = {{ high_threshold }};
+    const covPrecision = {{ precision }};
 
     const container = document.getElementById('treemap-chart');
     if (!container) return;
@@ -119,7 +120,7 @@
         if (!info) return;
         info.querySelector('.sunburst-info-path').textContent = node.path || node.name;
         info.querySelector('.sunburst-info-pct').innerHTML =
-            `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(1)}%</span>`;
+            `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(covPrecision)}%</span>`;
         info.querySelector('.sunburst-info-lines').textContent =
             `${node.covered_lines} / ${node.total_lines} lines covered`;
         info.querySelector('.sunburst-info-hint').textContent =
