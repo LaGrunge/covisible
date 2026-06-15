@@ -85,7 +85,7 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 # CodeCov-style coverage diff (console), optional markdown brief for CI comments
 covisible diff coverage_new.info -b coverage_old.info --markdown brief.md
 
-# List files by coverage
+# List files by coverage (-n 0 lists all, no limit)
 covisible files coverage.info --sort uncovered --limit 20
 
 # One-file summary

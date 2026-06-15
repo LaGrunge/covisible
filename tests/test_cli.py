@@ -54,3 +54,35 @@ def test_report_requires_current():
     result = CliRunner().invoke(main, ["report"])
     assert result.exit_code != 0
     assert "current" in result.output.lower()
+
+
+_LCOV_THREE = """\
+SF:a.c
+DA:1,1
+end_of_record
+SF:b.c
+DA:1,1
+end_of_record
+SF:c.c
+DA:1,0
+end_of_record
+"""
+
+
+def test_files_limit_caps_output(tmp_path):
+    cov = tmp_path / "c.lcov"
+    cov.write_text(_LCOV_THREE)
+    result = CliRunner().invoke(main, ["files", str(cov), "-n", "1"])
+    assert result.exit_code == 0, result.output
+    assert "and 2 more files" in result.output
+
+
+def test_files_limit_zero_shows_all(tmp_path):
+    cov = tmp_path / "c.lcov"
+    cov.write_text(_LCOV_THREE)
+    result = CliRunner().invoke(main, ["files", str(cov), "-n", "0"])
+    assert result.exit_code == 0, result.output
+    # every file present, no truncation notice
+    for name in ("a.c", "b.c", "c.c"):
+        assert name in result.output
+    assert "more files" not in result.output

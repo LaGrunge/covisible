@@ -366,7 +366,8 @@ def summary(coverage_file: Path) -> None:
 @main.command()
 @click.argument("coverage_file", type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "--limit", "-n", type=int, default=20, show_default=True, help="Max files to show."
+    "--limit", "-n", type=int, default=20, show_default=True,
+    help="Max files to show; 0 means no limit (show all).",
 )
 @click.option(
     "--sort",
@@ -379,6 +380,7 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
     """List files in a coverage file, ranked by the chosen order.
 
     Format (LCOV .info or gcov JSON) is auto-detected from the filename.
+    Use -n 0 to list every file without a limit.
     """
     cov = detect_and_parse(coverage_file)
 
@@ -391,13 +393,16 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
     else:
         file_list.sort(key=lambda f: str(f.path))
 
+    # -n 0 (or negative) disables the cap and shows every file.
+    shown = file_list if limit <= 0 else file_list[:limit]
+
     table = Table(show_header=True)
     table.add_column("File", style="dim", max_width=60)
     table.add_column("Coverage", justify="right")
     table.add_column("Covered", justify="right", style="green")
     table.add_column("Uncovered", justify="right", style="red")
 
-    for file_cov in file_list[:limit]:
+    for file_cov in shown:
         pct = file_cov.line_coverage_percent
         pct_style = "green" if pct >= 80 else "yellow" if pct >= 50 else "red"
         table.add_row(
@@ -409,8 +414,8 @@ def files(coverage_file: Path, limit: int, sort: str) -> None:
 
     console.print(table)
 
-    if len(file_list) > limit:
-        console.print(f"\n[dim]... and {len(file_list) - limit} more files[/]")
+    if len(shown) < len(file_list):
+        console.print(f"\n[dim]... and {len(file_list) - len(shown)} more files[/]")
 
 
 @main.command()
