@@ -1398,19 +1398,32 @@ h3 {
     display: none;
 }
 
-/* Switching Sunburst <-> Treemap: the incoming chart zooms/fades in. Both
-   charts share the same square footprint, so this reads as a morph between
-   the two shapes rather than a hard cut. */
+/* Switching Sunburst <-> Treemap reads as a clear swap: the outgoing chart
+   shrinks + blurs away, then the incoming one springs in. Both share the same
+   square footprint, so it feels like one shape morphing into the other. */
+@keyframes chartViewOut {
+    from { opacity: 1; transform: scale(1);    filter: blur(0); }
+    to   { opacity: 0; transform: scale(0.62); filter: blur(10px); }
+}
+
 @keyframes chartViewIn {
-    from { opacity: 0; transform: scale(0.94); }
-    to   { opacity: 1; transform: none; }
+    0%   { opacity: 0; transform: scale(0.62); filter: blur(10px); }
+    55%  { opacity: 1; filter: blur(0); }
+    100% { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+
+.chart-view.leaving {
+    animation: chartViewOut 0.22s ease-in both;
+    pointer-events: none;
 }
 
 .chart-view.entering {
-    animation: chartViewIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: center center;
+    animation: chartViewIn 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .chart-view.leaving,
     .chart-view.entering {
         animation: none;
     }

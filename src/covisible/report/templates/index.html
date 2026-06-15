@@ -863,25 +863,46 @@
     // follow navigation, so switching only flips which one is visible.
     document.querySelectorAll('.chart-toggle-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
+            // Ignore clicks while a swap is mid-flight.
+            if (document.querySelector('.chart-view.leaving')) return;
+
             const view = btn.dataset.view;
+            const sb = document.getElementById('view-sunburst');
+            const tm = document.getElementById('view-treemap');
+            const incoming = view === 'treemap' ? tm : sb;
+            const outgoing = view === 'treemap' ? sb : tm;
+            // Already showing this view? nothing to do.
+            if (!incoming || !incoming.classList.contains('hidden')) return;
+
             document.querySelectorAll('.chart-toggle-btn').forEach(function(b) {
                 b.classList.toggle('active', b === btn);
             });
-            const sb = document.getElementById('view-sunburst');
-            const tm = document.getElementById('view-treemap');
-            if (sb) sb.classList.toggle('hidden', view !== 'sunburst');
-            if (tm) tm.classList.toggle('hidden', view !== 'treemap');
-            // Re-sync the now-visible chart to the current directory.
-            if (view === 'treemap' && window.treemapFocus) window.treemapFocus(currentPath);
-            if (view === 'sunburst' && window.sunburstFocus) window.sunburstFocus(currentPath);
-            // Play the morph-in animation on the chart we just revealed.
-            const shown = view === 'treemap' ? tm : sb;
-            if (shown) {
-                shown.classList.remove('entering');
-                void shown.offsetWidth; // reflow so the animation restarts each switch
-                shown.classList.add('entering');
-                shown.addEventListener('animationend',
-                    () => shown.classList.remove('entering'), { once: true });
+
+            // Reveal the incoming chart, sync it to the current dir, spring it in.
+            function reveal() {
+                if (outgoing) { outgoing.classList.add('hidden'); outgoing.classList.remove('leaving'); }
+                incoming.classList.remove('hidden');
+                if (view === 'treemap' && window.treemapFocus) window.treemapFocus(currentPath);
+                if (view === 'sunburst' && window.sunburstFocus) window.sunburstFocus(currentPath);
+                incoming.classList.remove('entering');
+                void incoming.offsetWidth; // reflow so the animation restarts each switch
+                incoming.classList.add('entering');
+                incoming.addEventListener('animationend',
+                    () => incoming.classList.remove('entering'), { once: true });
+            }
+
+            const reduceMotion = window.matchMedia
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            // Animate the outgoing chart out first, then swap in the incoming one.
+            if (outgoing && !outgoing.classList.contains('hidden') && !reduceMotion) {
+                let done = false;
+                const after = function() { if (done) return; done = true; reveal(); };
+                outgoing.classList.add('leaving');
+                outgoing.addEventListener('animationend', after, { once: true });
+                setTimeout(after, 280); // fallback if animationend doesn't fire
+            } else {
+                reveal();
             }
         });
     });
