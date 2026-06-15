@@ -69,21 +69,65 @@ gcov --json-format --stdout myfile.cpp > coverage.json
 
 | Option | Description |
 |--------|-------------|
-| `-c, --current` | Current coverage file (gcov JSON or lcov.info) — **required** |
+| `-c, --current` | Coverage file (gcov JSON or lcov.info) — **required**. Repeatable: pass `-c` several times to merge shards/test runs (hit counts are summed) |
 | `-b, --baseline` | Baseline coverage for comparison (optional) |
 | `--git-diff` | Git diff range (e.g., `main..HEAD`) |
 | `--diff-file` | Path to unified diff file |
 | `-o, --output` | Output directory for HTML report (default: `coverage-report/`) |
 | `--format` | Output format: `html`, `json`, or `both` (default: `html`) |
+| `--config FILE` | Read option defaults from a TOML file (default: `./.covisible.toml` if present). CLI flags override the file |
 | `--repo` | Path to git repository (for `--git-diff` / title) |
 | `--source-root` | Directory where the source files live, used to render code when coverage paths are absolute build paths or relative to another root (defaults to `--repo`) |
 | `--title` | Report title (default: `Covisible: <project>`) |
 | `--blame / --no-blame` | Include git blame analysis for uncovered code |
 | `--branches / --no-branches` | Show branch coverage columns in the report (off by default; only rendered when the coverage data has branch info) |
 | `--range LOW,HIGH` | Coverage color thresholds as percentages: below `LOW` is red, `LOW`–`HIGH` yellow, at or above `HIGH` green (default: `50,80`). Applies to the summary cards, module-table bars, sunburst and treemap |
+| `--precision N` | Decimal places shown for coverage percentages everywhere (default: `1`) |
 | `--badge FILE` | Also write a shields-style SVG coverage badge to `FILE`: rounded line-coverage %, colored by `--range`, with the covisible eye logo |
+| `--cobertura FILE` | Also write a Cobertura XML report to `FILE` for CI tools (Jenkins, GitLab, Azure DevOps, SonarQube) |
+| `--history FILE` | Append this run to a JSON history file and render a coverage trend chart (commit it / cache it in CI to accumulate history) |
+| `--commit SHA` | Commit label for the `--history` entry (default: auto-detected from `--repo`) |
+| `--branch NAME` | Branch label for the `--history` entry (default: auto-detected from `--repo`; distinct from `--branches`) |
+| `--fail-under PCT` | Exit with status 1 if overall line coverage is below `PCT` (the report is still written) |
+| `--fail-under-new PCT` | Exit with status 1 if coverage of new/changed lines is below `PCT` (PR mode only) |
 | `--exclude GLOB` | Glob of files to exclude (repeatable, e.g. `--exclude '*_test.cpp'`) |
+| `--include GLOB` | Keep only files matching this glob, applied after `--exclude` (repeatable) |
+| `--omit-lines REGEXP` | Ignore source lines matching this regex, e.g. `--omit-lines 'assert'` (needs source on disk; repeatable) |
+| `--substitute s/RE/REPL/` | Rewrite coverage file paths with a sed-style regex so they match source on disk, e.g. `--substitute 's#/build/##'` (repeatable) |
+| `--prefix PREFIX` | Strip a leading path `PREFIX` from coverage file paths |
+| `--strip N` | Strip the first `N` leading directory levels from coverage file paths |
 | `--ignore-config` | Path to an ignore config (YAML/JSON) with `exclude`/`include`/`line_markers` |
+
+The report ships a light/dark theme that follows the OS `prefers-color-scheme`
+by default, with a header toggle (or press `t`) that persists your choice.
+
+### Config file
+
+Put commonly-used options in `.covisible.toml` (auto-discovered in the current
+directory, or point at one with `--config`). CLI flags always override it:
+
+```toml
+[report]
+range = "50,75"
+precision = 2
+branches = true
+exclude = ["*_test.cpp", "third_party/*"]
+fail_under = 80
+fail_under_new = 90
+badge = "coverage.svg"
+cobertura = "coverage.xml"
+```
+
+### CI gating
+
+Merge shards, fail the build under a threshold, and emit artifacts CI can ingest:
+
+```bash
+covisible report -c shard1.info -c shard2.info -o report/ \
+  --git-diff origin/main..HEAD --repo . \
+  --fail-under 80 --fail-under-new 90 \
+  --cobertura coverage.xml --badge coverage.svg --history history.json
+```
 
 ### Other commands
 
