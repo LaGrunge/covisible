@@ -348,6 +348,7 @@
     <script>
     const coverageData = {{ full_tree_data | tojson }};
     const hasBranches = {{ 'true' if show_branches else 'false' }};
+    const blameByPath = {{ blame_by_path | tojson }};
     {% if baseline_tree_data %}
     const baselineData = {{ baseline_tree_data | tojson }};
     const hasBaseline = true;
@@ -589,6 +590,7 @@
         currentPath = path;
         updateStats(path);
         updateTable(path);
+        renderAuthors(path);
 
         // Keep the sunburst focused on the same directory (animated).
         _syncingNav = true;
@@ -640,6 +642,44 @@
             const branchEl = document.getElementById('stat-branch-cov');
             if (branchEl) branchEl.className = 'stat-item ' + getCoverageClass(branchPct);
         }
+    }
+
+    // Re-render the "Uncovered Code by Author" panel for the current directory
+    // so it follows navigation (blameByPath is keyed by the same tree paths).
+    function renderAuthors(path) {
+        const list = document.getElementById('authors-list');
+        if (!list) return;  // blame disabled — section not rendered
+
+        const authors = blameByPath[path] || [];
+        if (!authors.length) {
+            list.innerHTML = '<div class="authors-empty">No uncovered lines in this directory.</div>';
+            return;
+        }
+        const esc = function(s) {
+            return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
+                return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
+            });
+        };
+        list.innerHTML = authors.map(function(a) {
+            const name = a.name || 'Unknown';
+            const initial = name.charAt(0).toUpperCase();
+            const hasEmail = a.email && a.email.indexOf('@') !== -1;
+            const href = hasEmail ? ' href="mailto:' + esc(a.email) + '"' : '';
+            const title = esc(name) + ' \u2014 ' + a.total_uncovered_lines
+                + ' uncovered lines, ' + a.files_count + ' files';
+            const img = a.avatar_url
+                ? '<img class="author-avatar-img" src="' + esc(a.avatar_url) + '" alt="" '
+                  + 'loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">'
+                : '';
+            return '<a class="author-card"' + href + ' title="' + title + '">'
+                + '<span class="author-avatar">' + img + esc(initial) + '</span>'
+                + '<span class="author-info">'
+                +   '<span class="author-name">' + esc(name) + '</span>'
+                +   '<span class="author-meta"><b class="author-lines">' + a.total_uncovered_lines
+                +     '</b> lines \u00b7 ' + a.files_count + ' files</span>'
+                + '</span>'
+                + '</a>';
+        }).join('');
     }
 
     function updateTable(path) {

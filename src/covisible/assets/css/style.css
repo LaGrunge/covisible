@@ -1655,91 +1655,96 @@ h3 {
 
 /* ===== Coverage by Author ===== */
 .authors-section {
-    margin-top: var(--spacing-xl);
-    margin-bottom: var(--spacing-xl);
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
 }
 
 .authors-section h2 {
-    font-size: var(--font-size-xl);
-    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--spacing-sm);
 }
 
+/* Compact, clickable author chips that wrap freely. */
 .authors-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: var(--spacing-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
 }
 
 .author-card {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+    padding: 3px 12px 3px 3px;
     background: var(--bg-secondary);
-    border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.author-card:hover {
+    border-color: var(--accent-color);
+    background: var(--bg-tertiary);
+    transform: translateY(-1px);
 }
 
 .author-avatar {
-    width: 40px;
-    height: 40px;
+    position: relative;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: var(--accent-color);
-    color: white;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: var(--font-size-lg);
+    font-size: 0.8rem;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.author-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .author-info {
-    flex: 1;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
     min-width: 0;
 }
 
 .author-name {
     font-weight: 600;
-    font-size: var(--font-size-base);
+    font-size: 0.85rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 240px;
 }
 
-.author-email {
-    font-size: var(--font-size-sm);
+.author-meta {
+    font-size: 0.72rem;
     color: var(--text-muted);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-.author-stats {
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.author-stat-value {
-    font-size: var(--font-size-xl);
+.author-lines {
+    color: var(--color-danger);
     font-weight: 700;
 }
 
-.author-stat-label {
+.authors-empty {
     font-size: var(--font-size-sm);
     color: var(--text-muted);
-}
-
-.author-files {
-    flex-shrink: 0;
-}
-
-.files-count {
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm) 0;
 }
 
 /* ===== LCOV-style Directory Browser ===== */
@@ -2227,7 +2232,7 @@ h3 {
     .directory-table td:nth-child(7) {
         display: none;
     }
-    
+
     .directory-table .subheader {
         display: none;
     }
@@ -2237,7 +2242,7 @@ h3 {
     .main {
         padding: var(--spacing-lg);
     }
-    
+
     .lcov-bar {
         width: 60px;
         height: 12px;
@@ -2252,16 +2257,16 @@ h3 {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .stats-row {
         flex-direction: column;
         gap: var(--spacing-sm);
     }
-    
+
     .stat-item {
         min-width: auto;
     }
-    
+
     .tab-nav {
         flex-wrap: wrap;
     }
@@ -2279,22 +2284,22 @@ h3 {
         min-width: 60px;
         min-height: 60px;
     }
-    
+
     /* Smaller coverage bars on mobile */
     .lcov-bar {
         width: 50px;
         height: 10px;
     }
-    
+
     .coverage-cell span {
         min-width: 45px;
         font-size: 14px;
     }
-    
+
     .dir-name {
         font-size: var(--font-size-sm);
     }
-    
+
     .file-icon {
         min-width: 28px;
         height: 20px;
@@ -2308,7 +2313,7 @@ h3 {
     .directory-table td:nth-child(5) {
         display: none;
     }
-    
+
     .directory-table thead tr:first-child th[colspan="3"]:last-of-type {
         display: none;
     }

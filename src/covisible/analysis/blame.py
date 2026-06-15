@@ -64,6 +64,15 @@ class GitBlameAnalyzer:
 
         result: dict[int, BlameInfo] = {}
 
+        # Run git from the file's own directory when we have a concrete file on
+        # disk, so git discovers the repository that actually contains it. A
+        # coverage path is often an absolute build path pointing into a
+        # different checkout than repo_path, and `git blame <path>` from an
+        # unrelated repo fails with "is outside repository".
+        cwd = self.repo_path
+        if file_path.is_absolute() and file_path.exists():
+            cwd = file_path.parent
+
         try:
             cmd = [
                 "git", "blame",
@@ -75,7 +84,7 @@ class GitBlameAnalyzer:
                 cmd,
                 capture_output=True,
                 text=True,
-                cwd=self.repo_path,
+                cwd=cwd,
                 check=True,
             )
 

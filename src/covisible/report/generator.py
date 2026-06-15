@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any
 
 from jinja2 import Environment, PackageLoader, Template, select_autoescape
 
-from covisible.analysis.blame import get_uncovered_blame_summary
+from covisible.analysis.blame import GitBlameAnalyzer
 from covisible.analysis.grouping import group_coverage_by_directory
 from covisible.analysis.history import CoverageHistory
 from covisible.analysis.pr_coverage import FilePRCoverage, PRCoverageAnalyzer
@@ -44,6 +45,32 @@ def _finalize_stat_percentages(stats: dict[str, Any]) -> None:
         if stats["total_branches"] > 0
         else 100.0
     )
+
+
+def _avatar_url(email: str | None) -> str:
+    """Best-effort avatar URL for a commit-author email, or '' when none.
+
+    GitHub ``noreply`` addresses resolve to the committer's GitHub avatar;
+    everything else falls back to Gravatar with ``d=404`` so the UI can drop
+    back to a letter monogram when the address has no picture.
+    """
+    if not email or "@" not in email:
+        return ""
+
+    local, _, domain = email.strip().lower().partition("@")
+    if domain == "users.noreply.github.com":
+        # "12345+login@..." → avatar by numeric id; "login@..." → by login.
+        if "+" in local:
+            uid, _, login = local.partition("+")
+            if uid.isdigit():
+                return f"https://avatars.githubusercontent.com/u/{uid}?s=48"
+        else:
+            login = local
+        if login:
+            return f"https://github.com/{login}.png?size=48"
+
+    digest = hashlib.md5(email.strip().lower().encode("utf-8"), usedforsecurity=False).hexdigest()
+    return f"https://www.gravatar.com/avatar/{digest}?s=48&d=404"
 
 
 class ReportGenerator:
@@ -220,18 +247,14 @@ class ReportGenerator:
             self.coverage, self.base_path, relativize=self._get_relative_path
         )
 
-        # Add blame data if enabled
-        if self.enable_blame:
-            uncovered_by_file = {
-                path: file_cov.get_uncovered_line_numbers()
-                for path, file_cov in self.coverage.files.items()
-                if file_cov.uncovered_lines > 0
-            }
-            context["blame_authors"] = get_uncovered_blame_summary(
-                uncovered_by_file, self.base_path, limit=10
-            )
-        else:
-            context["blame_authors"] = []
+        # Add blame data if enabled. Authorship is aggregated per directory
+        # tree path (same keys as the SPA tree), so the authors panel can follow
+        # directory navigation instead of always showing whole-project totals.
+        # The empty-string key holds the whole-project totals used for the
+        # initial server-side render.
+        blame_by_path = self._build_blame_by_path() if self.enable_blame else {}
+        context["blame_by_path"] = blame_by_path
+        context["blame_authors"] = blame_by_path.get("", [])
 
         # Add full tree data for SPA navigation
         context["full_tree_data"] = self._build_full_tree_for_spa()
@@ -258,6 +281,77 @@ class ReportGenerator:
             context["coverage_delta"] = None
 
         return context
+
+    def _build_blame_by_path(self, limit: int = 10) -> dict[str, list[dict[str, Any]]]:
+        """Aggregate uncovered-line authorship per directory tree path.
+
+        Returns ``{dir_path: [author, ...]}`` where ``dir_path`` matches the
+        SPA tree keys (and the empty string is the whole project), so the
+        authors panel can follow directory navigation. Each file's authorship
+        is attributed to the file's directory and every ancestor directory.
+        """
+        analyzer = GitBlameAnalyzer(self.base_path)
+        # dir_path -> email -> {name, email, lines, files}
+        acc: dict[str, dict[str, dict[str, Any]]] = {}
+
+        for path, file_cov in self.coverage.files.items():
+            if file_cov.uncovered_lines == 0:
+                continue
+            resolved = self._resolve_source_path(path)
+            if resolved is None:
+                continue
+            blame = analyzer.get_blame_for_lines(
+                resolved.resolve(), file_cov.get_uncovered_line_numbers()
+            )
+            if not blame:
+                continue
+
+            # Count this file's uncovered lines per author, keyed by a stable
+            # identity (email when present, else name) but keeping the real
+            # email for display and avatars.
+            per_author: dict[str, dict[str, Any]] = {}
+            for info in blame.values():
+                key = info.author_email or info.author
+                who = per_author.get(key)
+                if who is None:
+                    per_author[key] = {
+                        "name": info.author,
+                        "email": info.author_email,
+                        "count": 1,
+                    }
+                else:
+                    who["count"] += 1
+
+            rel = self._get_relative_path(path)
+            rel_str = str(rel).replace("\\", "/")
+            parts = rel.parts
+            # The file's directory plus every ancestor, including root ("").
+            for i in range(len(parts)):
+                dir_key = "/".join(parts[:i])
+                bucket = acc.setdefault(dir_key, {})
+                for key, who in per_author.items():
+                    agg = bucket.setdefault(
+                        key,
+                        {"name": who["name"], "email": who["email"],
+                         "lines": 0, "files": set()},
+                    )
+                    agg["lines"] += who["count"]
+                    agg["files"].add(rel_str)
+
+        result: dict[str, list[dict[str, Any]]] = {}
+        for dir_key, bucket in acc.items():
+            top = sorted(bucket.values(), key=lambda a: a["lines"], reverse=True)[:limit]
+            result[dir_key] = [
+                {
+                    "name": a["name"],
+                    "email": a["email"],
+                    "total_uncovered_lines": a["lines"],
+                    "files_count": len(a["files"]),
+                    "avatar_url": _avatar_url(a["email"]),
+                }
+                for a in top
+            ]
+        return result
 
     def _build_full_tree_for_spa(self) -> dict[str, Any]:
         """Build complete tree structure for SPA navigation."""

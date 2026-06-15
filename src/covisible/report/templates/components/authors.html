@@ -1,23 +1,20 @@
 <!-- Coverage by Author Component -->
 {% if blame_authors and blame_authors|length > 0 %}
-<section class="authors-section">
+<section class="authors-section" id="authors-section">
     <h2>Uncovered Code by Author</h2>
-    <div class="authors-list">
+    <div class="authors-list" id="authors-list">
         {% for author in blame_authors %}
-        <div class="author-card">
-            <div class="author-avatar">{{ author.name[0]|upper if author.name else '?' }}</div>
-            <div class="author-info">
-                <div class="author-name">{{ author.name or 'Unknown' }}</div>
-                <div class="author-email">{{ author.email or '' }}</div>
-            </div>
-            <div class="author-stats">
-                <div class="author-stat-value coverage-low">{{ author.total_uncovered_lines }}</div>
-                <div class="author-stat-label">uncovered lines</div>
-            </div>
-            <div class="author-files">
-                <span class="files-count">{{ author.files_count }} files</span>
-            </div>
-        </div>
+        <a class="author-card"{% if author.email and '@' in author.email %} href="mailto:{{ author.email }}"{% endif %}
+           title="{{ author.name }} — {{ author.total_uncovered_lines }} uncovered lines, {{ author.files_count }} files">
+            <span class="author-avatar">
+                {% if author.avatar_url %}<img class="author-avatar-img" src="{{ author.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">{% endif %}
+                {{ author.name[0]|upper if author.name else '?' }}
+            </span>
+            <span class="author-info">
+                <span class="author-name">{{ author.name or 'Unknown' }}</span>
+                <span class="author-meta"><b class="author-lines">{{ author.total_uncovered_lines }}</b> lines · {{ author.files_count }} files</span>
+            </span>
+        </a>
         {% endfor %}
     </div>
 </section>
