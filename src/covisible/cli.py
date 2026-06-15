@@ -229,6 +229,22 @@ def _git_revision(repo: Path | None) -> tuple[str | None, str | None]:
     "[default: auto-detected from --repo]. Distinct from --branches.",
 )
 @click.option(
+    "--fail-under",
+    type=click.FloatRange(0, 100),
+    default=None,
+    metavar="PCT",
+    help="Exit with status 1 if overall line coverage is below PCT. Use in CI "
+    "to gate merges. The report is still written before failing.",
+)
+@click.option(
+    "--fail-under-new",
+    type=click.FloatRange(0, 100),
+    default=None,
+    metavar="PCT",
+    help="Exit with status 1 if coverage of new/changed lines is below PCT "
+    "(PR mode only; needs --git-diff or --diff-file).",
+)
+@click.option(
     "--exclude",
     "exclude_patterns",
     multiple=True,
@@ -260,6 +276,8 @@ def report(
     history_file: Path | None,
     commit: str | None,
     vcs_branch: str | None,
+    fail_under: float | None,
+    fail_under_new: float | None,
     exclude_patterns: tuple[str, ...],
     ignore_config: Path | None,
 ) -> None:
@@ -436,6 +454,34 @@ def report(
             f"✓ Coverage badge written: [green]{badge_path}[/] "
             f"([green]{percent:.0f}%[/] line coverage)"
         )
+
+    # Coverage gating for CI. The report/badge are already written, so a failing
+    # build still publishes them; we only signal failure via a non-zero exit.
+    gate_failures: list[str] = []
+    if fail_under is not None:
+        line_pct = generator.coverage.line_coverage_percent
+        if line_pct < fail_under:
+            gate_failures.append(
+                f"line coverage {line_pct:.2f}% < required {fail_under:.2f}%"
+            )
+    if fail_under_new is not None:
+        if generator.analyzer is not None:
+            new_pct = generator.analyzer.summary.new_lines_coverage_percent
+            if new_pct < fail_under_new:
+                gate_failures.append(
+                    f"new-code coverage {new_pct:.2f}% < required {fail_under_new:.2f}%"
+                )
+        else:
+            console.print(
+                "[yellow]⚠ --fail-under-new ignored: not in PR mode "
+                "(pass --git-diff or --diff-file).[/]"
+            )
+    if gate_failures:
+        for msg in gate_failures:
+            console.print(f"[bold red]✗ Coverage gate failed:[/] {msg}")
+        raise SystemExit(1)
+    if fail_under is not None or fail_under_new is not None:
+        console.print("[green]✓ Coverage gate passed.[/]")
 
 
 def _print_summary(summary: PRCoverageSummary) -> None:

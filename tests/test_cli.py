@@ -173,6 +173,36 @@ def test_report_merges_multiple_current_files(tmp_path):
     assert summary["line_coverage_percent"] == 100.0
 
 
+def test_report_fail_under_gates_on_line_coverage(tmp_path):
+    cov = _write_lcov(tmp_path)  # 2 of 3 lines covered -> 66.67%
+    out = tmp_path / "report"
+
+    # Below the threshold: non-zero exit, but the report is still written.
+    r = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--fail-under", "90"]
+    )
+    assert r.exit_code == 1, r.output
+    assert "Coverage gate failed" in r.output
+    assert (out / "index.html").exists()
+
+    # At or above the threshold: passes.
+    r2 = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--fail-under", "50"]
+    )
+    assert r2.exit_code == 0, r2.output
+    assert "Coverage gate passed" in r2.output
+
+
+def test_report_fail_under_new_ignored_without_pr_mode(tmp_path):
+    cov = _write_lcov(tmp_path)
+    out = tmp_path / "report"
+    r = CliRunner().invoke(
+        main, ["report", "-c", str(cov), "-o", str(out), "--fail-under-new", "100"]
+    )
+    assert r.exit_code == 0, r.output
+    assert "ignored" in r.output
+
+
 def test_report_exclude_drops_files(tmp_path):
     cov = _write_lcov(tmp_path)
     out = tmp_path / "report"
