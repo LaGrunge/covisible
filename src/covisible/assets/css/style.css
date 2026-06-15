@@ -1323,11 +1323,13 @@ h3 {
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.treemap-cell.has-children {
+.treemap-cell.has-children,
+.treemap-cell.is-file {
     cursor: pointer;
 }
 
-.treemap-cell.has-children:hover {
+.treemap-cell.has-children:hover,
+.treemap-cell.is-file:hover {
     transform: scale(1.02);
     box-shadow: var(--shadow-md);
 }
@@ -1454,8 +1456,53 @@ h3 {
 
 /* The chart's <section> carries a big top margin for its legacy standalone
    use; kill it here. */
-.modules-chart .sunburst-section {
+.modules-chart .sunburst-section,
+.modules-chart .treemap-section {
     margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Sunburst / Treemap view switch above the chart. */
+.chart-toggle {
+    display: flex;
+    width: fit-content;
+    gap: 2px;
+    margin: 0 auto var(--spacing-sm);
+    padding: 3px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+}
+
+.chart-toggle-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    padding: 4px 16px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.chart-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+.chart-toggle-btn.active {
+    background: var(--bg-primary);
+    color: var(--accent-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.chart-view.hidden {
+    display: none;
+}
+
+.no-data {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--spacing-lg);
 }
 
 /* Subtle, theme-aware ring instead of a hard white 2px stroke. */

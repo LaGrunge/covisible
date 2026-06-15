@@ -188,6 +188,33 @@ class TestColorThresholds:
         assert html.count("const covHigh = 75") >= 2
 
 
+class TestTreemapView:
+    """The revived treemap is a switchable view sharing the sunburst's tree, so
+    its file paths and color thresholds must match the rest of the report."""
+
+    def test_treemap_included_and_wired(self, tmp_path):
+        cov = parse_lcov_string(ABSOLUTE_LCOV)
+        gen = ReportGenerator(
+            coverage=cov, output_dir=tmp_path / "report", color_thresholds=(50, 75)
+        )
+        gen.generate_html()
+        html = (tmp_path / "report" / "index.html").read_text()
+
+        # The Sunburst/Treemap toggle and both views are present.
+        assert 'data-view="treemap"' in html
+        assert 'id="view-treemap"' in html
+        assert 'id="treemap"' in html
+
+        # The treemap follows controller navigation and opens file pages by the
+        # same mangled-path convention as the sunburst.
+        assert "window.treemapFocus" in html
+        assert "if (window.treemapFocus) window.treemapFocus(path);" in html
+        assert "'files/' + fp + '.html'" in html
+
+        # Thresholds reach every view: main script + sunburst + treemap.
+        assert html.count("const covHigh = 75") >= 3
+
+
 class TestBaselineComparisonLinks:
     def test_impacted_links_resolve(self, tmp_path):
         current = parse_lcov_string(CURRENT_LCOV)

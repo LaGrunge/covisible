@@ -1,97 +1,129 @@
-<!-- Treemap Component -->
+<!-- Treemap Component (alternative view to the sunburst; same treemap_data) -->
 <section class="treemap-section">
-    <h2>Coverage by Directory</h2>
     <div class="treemap-container" id="treemap-container">
         <div class="treemap" id="treemap"></div>
     </div>
-    <div class="treemap-legend">
-        <span class="legend-item"><span class="legend-color coverage-high"></span> ≥80%</span>
-        <span class="legend-item"><span class="legend-color coverage-medium"></span> 50-80%</span>
-        <span class="legend-item"><span class="legend-color coverage-low"></span> &lt;50%</span>
-    </div>
+    <div class="treemap-legend" id="treemap-legend"></div>
 </section>
 
 <script>
 (function() {
     const treemapData = {{ treemap_data | tojson }};
-    
-    function renderTreemap(data, container) {
-        if (!data.children || data.children.length === 0) return;
-        
-        const containerEl = document.getElementById(container);
-        if (!containerEl) return;
-        
-        // Calculate total for sizing
-        const total = data.children.reduce((sum, c) => sum + c.total_lines, 0);
-        if (total === 0) return;
-        
-        // Sort by size descending
-        const sorted = [...data.children].sort((a, b) => b.total_lines - a.total_lines);
-        
-        // Render cells
-        sorted.forEach(item => {
-            const cell = document.createElement('div');
-            cell.className = 'treemap-cell';
-            
-            // Size based on total lines
-            const percent = (item.total_lines / total) * 100;
-            cell.style.flexBasis = `${Math.max(percent, 5)}%`;
-            cell.style.flexGrow = percent;
-            
-            // Color based on coverage
-            const cov = item.coverage_percent;
-            if (cov >= 80) {
-                cell.classList.add('coverage-high');
-            } else if (cov >= 50) {
-                cell.classList.add('coverage-medium');
-            } else {
-                cell.classList.add('coverage-low');
-            }
-            
-            // Content
-            cell.innerHTML = `
-                <div class="treemap-cell-name">${item.name}</div>
-                <div class="treemap-cell-stats">
-                    <span class="treemap-cell-percent">${cov.toFixed(1)}%</span>
-                    <span class="treemap-cell-lines">${item.uncovered_lines} uncovered</span>
-                </div>
-            `;
-            
-            // Tooltip
-            cell.title = `${item.path}\n${item.covered_lines}/${item.total_lines} lines covered (${cov.toFixed(1)}%)`;
-            
-            // Click to expand
-            if (item.children && item.children.length > 0) {
-                cell.classList.add('has-children');
-                cell.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    containerEl.innerHTML = '';
-                    
-                    // Add back button
-                    const backBtn = document.createElement('button');
-                    backBtn.className = 'treemap-back-btn';
-                    backBtn.textContent = '← Back';
-                    backBtn.addEventListener('click', () => {
-                        containerEl.innerHTML = '';
-                        renderTreemap(data, container);
-                    });
-                    containerEl.appendChild(backBtn);
-                    
-                    // Render children
-                    const childContainer = document.createElement('div');
-                    childContainer.className = 'treemap';
-                    childContainer.id = 'treemap-child';
-                    containerEl.appendChild(childContainer);
-                    renderTreemap(item, 'treemap-child');
-                });
-            }
-            
-            containerEl.appendChild(cell);
+    // Coverage color thresholds (CLI --range): the same tiers the module table
+    // and the sunburst use, so a cell reads the same color in every view.
+    const covLow = {{ low_threshold }};
+    const covHigh = {{ high_threshold }};
+
+    const container = document.getElementById('treemap');
+    if (!container) return;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
         });
     }
-    
-    if (treemapData && treemapData.children) {
-        renderTreemap(treemapData, 'treemap');
+
+    function coverageClass(pct) {
+        if (pct >= covHigh) return 'coverage-high';
+        if (pct >= covLow) return 'coverage-medium';
+        return 'coverage-low';
     }
+
+    function fmt(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+    // Find the tree node for a module path ('' = root). Paths are the same keys
+    // the module table and sunburst navigate by, so the views stay in sync.
+    function findNode(path) {
+        if (!path) return treemapData;
+        const parts = path.split('/');
+        let node = treemapData;
+        for (let i = 0; i < parts.length; i++) {
+            const wanted = parts.slice(0, i + 1).join('/');
+            const next = (node.children || []).find(function(c) {
+                return (c.path || c.name) === wanted;
+            });
+            if (!next) break;  // deepest existing ancestor
+            node = next;
+        }
+        return node;
+    }
+
+    function renderLegend() {
+        const legend = document.getElementById('treemap-legend');
+        if (!legend) return;
+        legend.innerHTML =
+            '<span class="legend-item"><span class="legend-color coverage-high"></span> \u2265' + fmt(covHigh) + '%</span>' +
+            '<span class="legend-item"><span class="legend-color coverage-medium"></span> ' + fmt(covLow) + '\u2013' + fmt(covHigh) + '%</span>' +
+            '<span class="legend-item"><span class="legend-color coverage-low"></span> &lt;' + fmt(covLow) + '%</span>';
+    }
+
+    // Render the children of the directory at `path`. Clicking a directory
+    // delegates to the page controller (so the table + sunburst follow);
+    // clicking a file opens its page, exactly like the sunburst.
+    function render(path) {
+        const node = findNode(path || '');
+        container.innerHTML = '';
+
+        const children = (node.children || []).slice();
+        if (!children.length) {
+            container.innerHTML = '<p class="no-data">No subdirectories to show here.</p>';
+            return;
+        }
+
+        const total = children.reduce(function(s, c) { return s + (c.total_lines || 0); }, 0);
+        if (total === 0) {
+            container.innerHTML = '<p class="no-data">No data</p>';
+            return;
+        }
+        children.sort(function(a, b) { return (b.total_lines || 0) - (a.total_lines || 0); });
+
+        children.forEach(function(item) {
+            const cov = item.coverage_percent || 0;
+            const isFile = !!item.is_file;
+
+            const cell = document.createElement('div');
+            cell.className = 'treemap-cell ' + coverageClass(cov) + (isFile ? ' is-file' : ' has-children');
+
+            const percent = (item.total_lines / total) * 100;
+            cell.style.flexBasis = Math.max(percent, 5) + '%';
+            cell.style.flexGrow = String(percent);
+
+            const icon = isFile ? '\uD83D\uDCC4 ' : '\uD83D\uDCC1 ';
+            cell.innerHTML =
+                '<div class="treemap-cell-name">' + icon + escapeHtml(item.name) + '</div>' +
+                '<div class="treemap-cell-stats">' +
+                    '<span class="treemap-cell-percent">' + cov.toFixed(1) + '%</span>' +
+                    '<span class="treemap-cell-lines">' + (item.uncovered_lines || 0) + ' uncovered</span>' +
+                '</div>';
+            cell.title = (item.path || item.name) + '\n' +
+                (item.covered_lines || 0) + '/' + (item.total_lines || 0) +
+                ' lines covered (' + cov.toFixed(1) + '%)';
+
+            cell.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (isFile) {
+                    if (item.full_path) {
+                        const fp = item.full_path.replace(/\//g, '_').replace(/\\/g, '_');
+                        window.location.href = 'files/' + fp + '.html';
+                    }
+                } else {
+                    const target = item.path || item.name;
+                    if (window.onSunburstNavigate) window.onSunburstNavigate(target);
+                    else render(target);
+                }
+            });
+
+            container.appendChild(cell);
+        });
+    }
+
+    renderLegend();
+
+    // Follow controller-driven navigation, mirroring window.sunburstFocus.
+    window.treemapFocus = function(path) { render(path || ''); };
+
+    // Initial render at whatever directory the table currently shows.
+    const start = window.getCurrentModulePath ? window.getCurrentModulePath() : '';
+    render(start || '');
 })();
 </script>

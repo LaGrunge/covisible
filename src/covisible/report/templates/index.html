@@ -289,7 +289,16 @@
         </div>
         </div>
         <div class="modules-chart">
-            {% include "components/sunburst.html" %}
+            <div class="chart-toggle" role="tablist">
+                <button type="button" class="chart-toggle-btn active" data-view="sunburst">Sunburst</button>
+                <button type="button" class="chart-toggle-btn" data-view="treemap">Treemap</button>
+            </div>
+            <div class="chart-view" id="view-sunburst">
+                {% include "components/sunburst.html" %}
+            </div>
+            <div class="chart-view hidden" id="view-treemap">
+                {% include "components/treemap.html" %}
+            </div>
         </div>
       </div>
     </div>
@@ -596,9 +605,11 @@
         updateTable(path);
         renderAuthors(path);
 
-        // Keep the sunburst focused on the same directory (animated).
+        // Keep both charts focused on the same directory (animated). Guarded
+        // so a chart re-render can't bounce back into navigateTo.
         _syncingNav = true;
         if (window.sunburstFocus) window.sunburstFocus(path);
+        if (window.treemapFocus) window.treemapFocus(path);
         _syncingNav = false;
 
         // Update browser history
@@ -845,6 +856,24 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             this.classList.add('active');
             document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+        });
+    });
+
+    // Chart view toggle: Sunburst <-> Treemap. Both read the same tree and
+    // follow navigation, so switching only flips which one is visible.
+    document.querySelectorAll('.chart-toggle-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const view = btn.dataset.view;
+            document.querySelectorAll('.chart-toggle-btn').forEach(function(b) {
+                b.classList.toggle('active', b === btn);
+            });
+            const sb = document.getElementById('view-sunburst');
+            const tm = document.getElementById('view-treemap');
+            if (sb) sb.classList.toggle('hidden', view !== 'sunburst');
+            if (tm) tm.classList.toggle('hidden', view !== 'treemap');
+            // Re-sync the now-visible chart to the current directory.
+            if (view === 'treemap' && window.treemapFocus) window.treemapFocus(currentPath);
+            if (view === 'sunburst' && window.sunburstFocus) window.sunburstFocus(currentPath);
         });
     });
 
