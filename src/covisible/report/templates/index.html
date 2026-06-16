@@ -429,7 +429,11 @@
     }
 
     window.setCoverageMetric = function(metric) {
-        if (!metric) return;
+        if (!metric || metric === window.coverageMetric) return;
+        // Snapshot the sunburst's current arc geometry while the OLD metric is
+        // still active, so it can animate from the previous layout to the new
+        // one. (The treemap animates from its own retained layout.)
+        if (window.sunburstSnapshot) window.sunburstSnapshot();
         window.coverageMetric = metric;
         applyMetricActive();
         if (window.sunburstRerender) window.sunburstRerender();

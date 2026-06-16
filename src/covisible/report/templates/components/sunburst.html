@@ -457,9 +457,21 @@
         // whatever directory the table currently shows.
         render(data);
 
-        // Re-render the current zoom level with the active coverage metric
-        // (summary cards call this); no animation so the recolor/resize is instant.
-        window.sunburstRerender = function() { render(currentRoot, false); };
+        // Re-render the current zoom level with the active coverage metric.
+        // setCoverageMetric() calls sunburstSnapshot() first (while the OLD
+        // metric is still active) to capture the current arc geometry, so the
+        // rerender animates from the previous metric's layout to the new one,
+        // reusing the same arc transition as zooming.
+        let metricPrevNodes = null;
+        window.sunburstSnapshot = function() { metricPrevNodes = collectNodes(currentRoot); };
+        window.sunburstRerender = function() {
+            if (metricPrevNodes) {
+                render(currentRoot, true, metricPrevNodes);
+                metricPrevNodes = null;
+            } else {
+                render(currentRoot, false);
+            }
+        };
 
         // Exposed so the modules controller can focus the chart on a directory.
         window.sunburstFocus = function(path, animate = true) {

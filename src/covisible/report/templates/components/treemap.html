@@ -301,8 +301,10 @@
     window.treemapFocus = function(path) { render(path || '', true); };
 
     // Re-render the current directory with the active coverage metric (summary
-    // cards call this); instant, no animation.
-    window.treemapRerender = function() { render(lastPath, false); };
+    // cards call this); animated — reuses the native FLIP transition so cells
+    // glide and resize from the old metric's layout to the new one (prevLayout
+    // still holds the on-screen geometry from the last render).
+    window.treemapRerender = function() { render(lastPath, true); };
 
     // Initial render at whatever directory the table currently shows.
     const startPath = window.getCurrentModulePath ? window.getCurrentModulePath() : '';
