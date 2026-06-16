@@ -388,8 +388,14 @@
                 });
 
                 animateTransition(prevNodes, nodes, prevRingWidth, ringWidth, () => {
-                    // Clean up paths that are no longer visible
-                    const nodeKeys = new Set(nodes.map(n => n.node.path || n.node.name));
+                    // Clean up paths that are no longer visible. Exclude the root
+                    // (nodes[0]): it's drawn as the center circle, never an arc, so
+                    // a leftover arc element for it — kept alive from when this node
+                    // was a child in the previous view — must be removed. Otherwise
+                    // it lingers as a thin ring just inside the disc and steals
+                    // hover/clicks from the inner edge of real segments, showing the
+                    // parent's identity and a dead (already-here) click.
+                    const nodeKeys = new Set(nodes.slice(1).map(n => n.node.path || n.node.name));
                     pathElements.forEach((path, key) => {
                         if (!nodeKeys.has(key)) {
                             path.remove();
