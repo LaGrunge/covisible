@@ -366,16 +366,18 @@ h3 {
 }
 
 /* Clickable coverage-metric cards: picking one drives which metric the
-   sunburst/treemap show (size + color). */
+   sunburst/treemap show (size + color). The active state is a slim accent
+   underline rather than a heavy ring, so it reads as a quiet tab indicator. */
 .metric-card {
     cursor: pointer;
     user-select: none;
-    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    position: relative;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .metric-card:hover {
     transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
 }
 
 .metric-card:focus-visible {
@@ -383,20 +385,22 @@ h3 {
     outline-offset: 2px;
 }
 
-.metric-card.metric-active {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px var(--accent-color) inset;
-}
-
 .metric-card.metric-active .stat-label {
     color: var(--accent-color);
-    font-weight: 700;
+    font-weight: 600;
 }
 
-.metric-card.metric-active .stat-label::after {
-    content: " ●";
-    font-size: 0.7em;
-    vertical-align: middle;
+/* Slim centered accent bar at the card's base — the whole "selected" cue. */
+.metric-card.metric-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    border-radius: var(--radius-full);
+    background: var(--accent-color);
 }
 
 /* ===== Tab Navigation ===== */
