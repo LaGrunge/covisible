@@ -221,10 +221,33 @@
 
     const lerp = (a, b, t) => a + (b - a) * t;
 
-    // FLIP-style transition: survivors glide between boxes, new cells fade in,
-    // removed cells fade out.
+    // Parse the hsla() strings getCoverageColor() emits, so survivor cells can
+    // glide their *color* (not just geometry) when the active metric changes.
+    function parseHsla(str) {
+        const m = /hsla?\(\s*([-\d.]+)\s*,\s*([-\d.]+)%\s*,\s*([-\d.]+)%\s*,\s*([-\d.]+)\s*\)/.exec(str || '');
+        return m ? { h: +m[1], s: +m[2], l: +m[3], a: +m[4] } : null;
+    }
+    function lerpColor(a, b, t) {
+        return `hsla(${lerp(a.h, b.h, t).toFixed(1)}, ${lerp(a.s, b.s, t).toFixed(1)}%, ` +
+               `${lerp(a.l, b.l, t).toFixed(1)}%, ${lerp(a.a, b.a, t).toFixed(3)})`;
+    }
+
+    // FLIP-style transition: survivors glide between boxes AND recolor to the
+    // active metric, new cells fade in, removed cells fade out.
     function animate(from, to) {
         if (rafId) cancelAnimationFrame(rafId);
+        // Snapshot each survivor's current fill (old metric) and target fill
+        // (new metric) up front, so color glides in step with the geometry.
+        // Reading the live fill means a re-clicked/interrupted switch resumes
+        // from whatever color is currently on screen.
+        const colorFrom = new Map(), colorTo = new Map();
+        cells.forEach((entry, key) => {
+            if (from.has(key) && to.has(key)) {
+                const a = parseHsla(entry.rect.getAttribute('fill'));
+                const b = parseHsla(getCoverageColor(mPercent(entry.node)));
+                if (a && b) { colorFrom.set(key, a); colorTo.set(key, b); }
+            }
+        });
         const startT = performance.now();
         function frame(now) {
             const t = Math.min((now - startT) / animDuration, 1);
@@ -237,6 +260,8 @@
                         w: lerp(f.w, g.w, e), h: lerp(f.h, g.h, e),
                     });
                     entry.rect.style.opacity = '1';
+                    const ca = colorFrom.get(key), cb = colorTo.get(key);
+                    if (ca && cb) entry.rect.setAttribute('fill', lerpColor(ca, cb, e));
                 } else if (g && !f) {
                     entry.rect.style.opacity = e.toString();
                 } else if (f && !g) {
@@ -248,7 +273,11 @@
             } else {
                 cells.forEach((entry, key) => {
                     if (!to.has(key)) { entry.rect.remove(); cells.delete(key); }
-                    else { entry.rect.style.opacity = '1'; }
+                    else {
+                        entry.rect.style.opacity = '1';
+                        // Land exactly on the target color (no float drift).
+                        if (colorTo.has(key)) entry.rect.setAttribute('fill', getCoverageColor(mPercent(entry.node)));
+                    }
                 });
                 rafId = null;
             }

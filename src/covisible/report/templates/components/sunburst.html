@@ -196,6 +196,17 @@
         // Interpolate between two values
         function lerp(a, b, t) { return a + (b - a) * t; }
 
+        // Parse/blend the hsla() strings getCoverageColor() emits, so survivor
+        // arcs can glide their color (not just their shape) on a metric switch.
+        function parseHsla(str) {
+            const m = /hsla?\(\s*([-\d.]+)\s*,\s*([-\d.]+)%\s*,\s*([-\d.]+)%\s*,\s*([-\d.]+)\s*\)/.exec(str || '');
+            return m ? { h: +m[1], s: +m[2], l: +m[3], a: +m[4] } : null;
+        }
+        function lerpColor(a, b, t) {
+            return `hsla(${lerp(a.h, b.h, t).toFixed(1)}, ${lerp(a.s, b.s, t).toFixed(1)}%, ` +
+                   `${lerp(a.l, b.l, t).toFixed(1)}%, ${lerp(a.a, b.a, t).toFixed(3)})`;
+        }
+
         // Animate transition between states. fromRW/toRW are the ring widths
         // of the two views, interpolated so thickness changes smoothly.
         function animateTransition(fromNodes, toNodes, fromRW, toRW, onComplete) {
@@ -206,6 +217,18 @@
             fromNodes.forEach(n => fromMap.set(n.node.path || n.node.name, n));
             const toMap = new Map();
             toNodes.forEach(n => toMap.set(n.node.path || n.node.name, n));
+
+            // Snapshot survivor colors up front (current fill vs. target-metric
+            // color) so arcs recolor in step with the shape morph. animateTransition
+            // otherwise only touches the arc geometry and opacity.
+            const colorFrom = new Map(), colorTo = new Map();
+            pathElements.forEach((path, key) => {
+                if (fromMap.has(key) && toMap.has(key)) {
+                    const a = parseHsla(path.getAttribute('fill'));
+                    const b = parseHsla(getCoverageColor(mPercent(toMap.get(key).node)));
+                    if (a && b) { colorFrom.set(key, a); colorTo.set(key, b); }
+                }
+            });
 
             function animate(currentTime) {
                 const elapsed = currentTime - startTime;
@@ -236,6 +259,8 @@
                         } else {
                             path.style.opacity = '0';
                         }
+                        const cf = colorFrom.get(key), ct = colorTo.get(key);
+                        if (cf && ct) path.setAttribute('fill', lerpColor(cf, ct, easeT));
                     } else if (to && !from) {
                         // Fade in new elements
                         path.style.opacity = easeT.toString();
@@ -248,6 +273,11 @@
                 if (t < 1) {
                     requestAnimationFrame(animate);
                 } else {
+                    // Land survivors exactly on the target color (no float drift).
+                    colorTo.forEach((_c, key) => {
+                        const p = pathElements.get(key);
+                        if (p) p.setAttribute('fill', getCoverageColor(mPercent(toMap.get(key).node)));
+                    });
                     if (onComplete) onComplete();
                 }
             }
