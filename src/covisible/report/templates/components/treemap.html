@@ -24,6 +24,32 @@
     const covHigh = {{ high_threshold }};
     const covPrecision = {{ precision }};
 
+    // Active coverage metric (line/function/branch), owned by the page
+    // controller and read live so the summary cards can switch the view.
+    function curMetric() { return window.coverageMetric || 'line'; }
+    function mPercent(n) {
+        const m = curMetric();
+        if (m === 'function') return n.function_coverage_percent ?? 100;
+        if (m === 'branch') return n.branch_coverage_percent ?? 100;
+        return n.coverage_percent ?? 100;
+    }
+    function mTotal(n) {
+        const m = curMetric();
+        if (m === 'function') return n.total_functions || 0;
+        if (m === 'branch') return n.total_branches || 0;
+        return n.total_lines || 0;
+    }
+    function mCovered(n) {
+        const m = curMetric();
+        if (m === 'function') return n.covered_functions || 0;
+        if (m === 'branch') return n.covered_branches || 0;
+        return n.covered_lines || 0;
+    }
+    function mLabel() {
+        const m = curMetric();
+        return m === 'function' ? 'functions' : m === 'branch' ? 'branches' : 'lines';
+    }
+
     const container = document.getElementById('treemap-chart');
     if (!container) return;
 
@@ -120,9 +146,9 @@
         if (!info) return;
         info.querySelector('.sunburst-info-path').textContent = node.path || node.name;
         info.querySelector('.sunburst-info-pct').innerHTML =
-            `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(covPrecision)}%</span>`;
+            `<span style="color:${getCoverageColor(mPercent(node), 1)};font-size:1.5em;font-weight:700">${mPercent(node).toFixed(covPrecision)}%</span>`;
         info.querySelector('.sunburst-info-lines').textContent =
-            `${node.covered_lines} / ${node.total_lines} lines covered`;
+            `${mCovered(node)} / ${mTotal(node)} ${mLabel()} covered`;
         info.querySelector('.sunburst-info-hint').textContent =
             node.is_file ? '🔗 Click to view file' : (node.children?.length ? '🔍 Click to zoom in' : '');
     }
@@ -160,6 +186,7 @@
     const cells = new Map();      // key -> { rect, node }
     let prevLayout = new Map();   // key -> {x,y,w,h} from the previous render
     let rafId = null;
+    let lastPath = '';            // current directory, for metric re-renders
 
     function inset(r) {
         return { x: r.x + PAD, y: r.y + PAD, w: Math.max(0, r.w - 2 * PAD), h: Math.max(0, r.h - 2 * PAD) };
@@ -178,14 +205,14 @@
         rect.setAttribute('class', 'treemap-rect');
         rect.setAttribute('rx', RADIUS);
         rect.setAttribute('ry', RADIUS);
-        rect.setAttribute('fill', getCoverageColor(node.coverage_percent));
+        rect.setAttribute('fill', getCoverageColor(mPercent(node)));
         applyRect(rect, r);
         rect.addEventListener('mouseenter', () => {
-            rect.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+            rect.setAttribute('fill', getCoverageColor(mPercent(node), 1));
             showInfo(node);
         });
         rect.addEventListener('mouseleave', () => {
-            rect.setAttribute('fill', getCoverageColor(node.coverage_percent));
+            rect.setAttribute('fill', getCoverageColor(mPercent(node)));
             hideInfo();
         });
         rect.addEventListener('click', (e) => handleNodeClick(node, e));
@@ -230,9 +257,11 @@
     }
 
     function render(path, doAnimate) {
+        lastPath = path || '';
         const node = findNode(path || '');
+        // Size cells by the active metric; cells with none of it drop out.
         const items = (node.children || [])
-            .map(c => ({ node: c, value: c.total_lines || 0 }))
+            .map(c => ({ node: c, value: mTotal(c) }))
             .filter(it => it.value > 0)
             .sort((a, b) => b.value - a.value);
 
@@ -270,6 +299,10 @@
     // Exposed so the modules controller can focus the treemap on a directory,
     // mirroring window.sunburstFocus.
     window.treemapFocus = function(path) { render(path || '', true); };
+
+    // Re-render the current directory with the active coverage metric (summary
+    // cards call this); instant, no animation.
+    window.treemapRerender = function() { render(lastPath, false); };
 
     // Initial render at whatever directory the table currently shows.
     const startPath = window.getCurrentModulePath ? window.getCurrentModulePath() : '';

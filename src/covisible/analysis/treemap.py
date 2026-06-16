@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from covisible.core.models import CoverageData
+from covisible.core.models import CoverageData, FileCoverage
 
 
 @dataclass
@@ -19,6 +19,10 @@ class TreemapNode:
     full_path: str = ""
     total_lines: int = 0
     covered_lines: int = 0
+    total_functions: int = 0
+    covered_functions: int = 0
+    total_branches: int = 0
+    covered_branches: int = 0
     children: dict[str, TreemapNode] = field(default_factory=dict)
     is_file: bool = False
 
@@ -26,14 +30,29 @@ class TreemapNode:
     def uncovered_lines(self) -> int:
         return self.total_lines - self.covered_lines
 
+    @staticmethod
+    def _percent(covered: int, total: int) -> float:
+        # Nothing to measure reads as fully covered, matching FileCoverage.
+        return (covered / total) * 100 if total > 0 else 100.0
+
     @property
     def coverage_percent(self) -> float:
-        if self.total_lines == 0:
-            return 100.0
-        return (self.covered_lines / self.total_lines) * 100
+        return self._percent(self.covered_lines, self.total_lines)
+
+    @property
+    def function_coverage_percent(self) -> float:
+        return self._percent(self.covered_functions, self.total_functions)
+
+    @property
+    def branch_coverage_percent(self) -> float:
+        return self._percent(self.covered_branches, self.total_branches)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
+        """Convert to dictionary for JSON serialization.
+
+        Every metric (lines/functions/branches) ships per node so the charts
+        can resize and recolor client-side when the user picks a metric.
+        """
         result: dict[str, Any] = {
             "name": self.name,
             "path": self.path,
@@ -42,6 +61,12 @@ class TreemapNode:
             "covered_lines": self.covered_lines,
             "uncovered_lines": self.uncovered_lines,
             "coverage_percent": round(self.coverage_percent, 2),
+            "total_functions": self.total_functions,
+            "covered_functions": self.covered_functions,
+            "function_coverage_percent": round(self.function_coverage_percent, 2),
+            "total_branches": self.total_branches,
+            "covered_branches": self.covered_branches,
+            "branch_coverage_percent": round(self.branch_coverage_percent, 2),
             "is_file": self.is_file,
         }
         if self.children:
@@ -88,7 +113,7 @@ class TreemapBuilder:
     def build(self) -> TreemapNode:
         """Build the treemap hierarchy."""
         for file_path, file_cov in self.coverage.files.items():
-            self._add_file(file_path, file_cov.total_lines, file_cov.covered_lines)
+            self._add_file(file_path, file_cov)
 
         self._propagate_totals(self.root)
         return self.root
@@ -120,8 +145,8 @@ class TreemapBuilder:
 
         return file_path
 
-    def _add_file(self, file_path: Path, total_lines: int, covered_lines: int) -> None:
-        """Add a file to the treemap."""
+    def _add_file(self, file_path: Path, file_cov: FileCoverage) -> None:
+        """Add a file (with all its metric counts) to the treemap."""
         rel_path = self._relativize(file_path)
 
         parts = rel_path.parts
@@ -142,25 +167,40 @@ class TreemapBuilder:
             current = current.children[part]
 
             if is_last:
-                current.total_lines = total_lines
-                current.covered_lines = covered_lines
+                current.total_lines = file_cov.total_lines
+                current.covered_lines = file_cov.covered_lines
+                current.total_functions = file_cov.total_functions
+                current.covered_functions = file_cov.covered_functions
+                current.total_branches = file_cov.total_branches
+                current.covered_branches = file_cov.covered_branches
                 current.full_path = str(file_path)
 
-    def _propagate_totals(self, node: TreemapNode) -> tuple[int, int]:
-        """Propagate totals up the tree."""
+    def _propagate_totals(self, node: TreemapNode) -> tuple[int, int, int, int, int, int]:
+        """Propagate line/function/branch totals up the tree."""
         if node.is_file or not node.children:
-            return node.total_lines, node.covered_lines
+            return (
+                node.total_lines,
+                node.covered_lines,
+                node.total_functions,
+                node.covered_functions,
+                node.total_branches,
+                node.covered_branches,
+            )
 
-        total = 0
-        covered = 0
+        totals = [0, 0, 0, 0, 0, 0]
         for child in node.children.values():
-            child_total, child_covered = self._propagate_totals(child)
-            total += child_total
-            covered += child_covered
+            child_totals = self._propagate_totals(child)
+            totals = [a + b for a, b in zip(totals, child_totals, strict=True)]
 
-        node.total_lines = total
-        node.covered_lines = covered
-        return total, covered
+        (
+            node.total_lines,
+            node.covered_lines,
+            node.total_functions,
+            node.covered_functions,
+            node.total_branches,
+            node.covered_branches,
+        ) = totals
+        return tuple(totals)  # type: ignore[return-value]
 
     def get_flat_directories(self, min_lines: int = 0) -> list[dict[str, Any]]:
         """Get flat list of directories with coverage stats."""

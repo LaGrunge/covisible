@@ -5,7 +5,7 @@
     <!-- Summary stats with color coding (dynamic) -->
     <section class="summary-header-section" id="stats-section">
         <div class="stats-row">
-            <div class="stat-item" id="stat-line-cov">
+            <div class="stat-item metric-card" id="stat-line-cov" data-metric="line" role="button" tabindex="0" title="Show line coverage in the charts">
                 <div class="stat-value" id="stat-line-pct">{{ coverage.line_coverage_percent|format_percent }}</div>
                 <div class="stat-label">Line Coverage</div>
             </div>
@@ -13,7 +13,7 @@
                 <div class="stat-value" id="stat-lines">{{ coverage.covered_lines }} / {{ coverage.total_lines }}</div>
                 <div class="stat-label">Lines</div>
             </div>
-            <div class="stat-item" id="stat-func-cov">
+            <div class="stat-item metric-card" id="stat-func-cov" data-metric="function" role="button" tabindex="0" title="Show function coverage in the charts">
                 <div class="stat-value" id="stat-func-pct">{{ coverage.function_coverage_percent|format_percent }}</div>
                 <div class="stat-label">Function Coverage</div>
             </div>
@@ -22,7 +22,7 @@
                 <div class="stat-label">Files</div>
             </div>
             {% if show_branches %}
-            <div class="stat-item" id="stat-branch-cov">
+            <div class="stat-item metric-card" id="stat-branch-cov" data-metric="branch" role="button" tabindex="0" title="Show branch coverage in the charts">
                 <div class="stat-value" id="stat-branch-pct">{{ coverage.branch_coverage_percent|format_percent }}</div>
                 <div class="stat-label">Branch Coverage</div>
             </div>
@@ -414,6 +414,39 @@
     // The sunburst reads this on first render to align with the table.
     window.getCurrentModulePath = function() { return currentPath; };
 
+    // ---- Coverage metric switch (Line / Function / Branch cards) -----------
+    // The summary cards are clickable; picking one re-renders the sunburst and
+    // treemap to size and color by that metric. The choice persists across
+    // directory navigation (updateStats re-applies the highlight).
+    window.coverageMetric = 'line';
+
+    function applyMetricActive() {
+        document.querySelectorAll('.metric-card').forEach(card => {
+            const on = card.dataset.metric === window.coverageMetric;
+            card.classList.toggle('metric-active', on);
+            card.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+    }
+
+    window.setCoverageMetric = function(metric) {
+        if (!metric) return;
+        window.coverageMetric = metric;
+        applyMetricActive();
+        if (window.sunburstRerender) window.sunburstRerender();
+        if (window.treemapRerender) window.treemapRerender();
+    };
+
+    document.querySelectorAll('.metric-card').forEach(card => {
+        card.addEventListener('click', () => window.setCoverageMetric(card.dataset.metric));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                window.setCoverageMetric(card.dataset.metric);
+            }
+        });
+    });
+    applyMetricActive();
+
     function formatDelta(delta, isPercent = false) {
         if (delta === null || delta === undefined) return '';
         const val = isPercent ? delta.toFixed(covPrecision) + '%' : delta;
@@ -644,8 +677,8 @@
         // Update color classes
         const lineEl = document.getElementById('stat-line-cov');
         const funcEl = document.getElementById('stat-func-cov');
-        lineEl.className = 'stat-item ' + getCoverageClass(linePct);
-        funcEl.className = 'stat-item ' + getCoverageClass(funcPct);
+        lineEl.className = 'stat-item metric-card ' + getCoverageClass(linePct);
+        funcEl.className = 'stat-item metric-card ' + getCoverageClass(funcPct);
 
         // Branch coverage card — only present in --branches mode.
         const branchPctEl = document.getElementById('stat-branch-pct');
@@ -657,8 +690,11 @@
                 branchesEl.textContent = (stats.covered_branches || 0) + ' / ' + (stats.total_branches || 0);
             }
             const branchEl = document.getElementById('stat-branch-cov');
-            if (branchEl) branchEl.className = 'stat-item ' + getCoverageClass(branchPct);
+            if (branchEl) branchEl.className = 'stat-item metric-card ' + getCoverageClass(branchPct);
         }
+
+        // className was just rewritten above, so re-apply the active highlight.
+        applyMetricActive();
     }
 
     // Re-render the "Uncovered Code by Author" panel for the current directory

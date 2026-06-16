@@ -10,13 +10,40 @@ from covisible.analysis.treemap import (
     build_treemap_data,
     get_directory_coverage,
 )
-from covisible.core.models import CoverageData, FileCoverage, LineCoverage
+from covisible.core.models import (
+    BranchCoverage,
+    CoverageData,
+    FileCoverage,
+    FunctionCoverage,
+    LineCoverage,
+)
 
 
 def _f(path: str, total: int, covered: int) -> FileCoverage:
     fc = FileCoverage(path=Path(path))
     for i in range(1, total + 1):
         fc.lines[i] = LineCoverage(line_number=i, count=1 if i <= covered else 0)
+    return fc
+
+
+def _rich_file(
+    path: str, *, lines: list[int], funcs: list[int], branches: list[int]
+) -> FileCoverage:
+    """Build a file with explicit line/function/branch hit counts (branches on line 1)."""
+    fc = FileCoverage(path=Path(path))
+    for i, cnt in enumerate(lines, start=1):
+        fc.lines[i] = LineCoverage(line_number=i, count=cnt)
+    for i, exec_count in enumerate(funcs):
+        fc.functions.append(
+            FunctionCoverage(
+                name=f"f{i}", demangled_name=None, start_line=1, end_line=1,
+                execution_count=exec_count,
+            )
+        )
+    if branches:
+        line = fc.lines.setdefault(1, LineCoverage(line_number=1, count=0))
+        for bid, cnt in enumerate(branches):
+            line.branches.append(BranchCoverage(line_number=1, branch_id=bid, count=cnt))
     return fc
 
 
@@ -85,6 +112,27 @@ def test_build_empty_coverage_has_no_children():
     root = build_treemap_data(_cov())
     assert "children" not in root
     assert root["total_lines"] == 0
+
+
+def test_to_dict_includes_function_and_branch_metrics():
+    fc = _rich_file("/p/a.c", lines=[1, 0], funcs=[1, 0], branches=[1, 0])
+    root = build_treemap_data(_cov(fc), base_path="/p")
+    a = _child(root, "a.c")
+    assert a["total_functions"] == 2 and a["covered_functions"] == 1
+    assert a["function_coverage_percent"] == 50.0
+    assert a["total_branches"] == 2 and a["covered_branches"] == 1
+    assert a["branch_coverage_percent"] == 50.0
+
+
+def test_propagates_function_and_branch_totals():
+    f1 = _rich_file("/p/pkg/a.c", lines=[1], funcs=[1, 1], branches=[1, 0])
+    f2 = _rich_file("/p/pkg/b.c", lines=[0], funcs=[0], branches=[0, 0])
+    root = build_treemap_data(_cov(f1, f2), base_path="/p")
+    pkg = _child(root, "pkg")
+    assert pkg["total_functions"] == 3 and pkg["covered_functions"] == 2
+    assert pkg["total_branches"] == 4 and pkg["covered_branches"] == 1
+    # Whole-project rollup carries the same metric totals.
+    assert root["total_functions"] == 3 and root["total_branches"] == 4
 
 
 # --- get_directory_coverage -------------------------------------------------

@@ -26,6 +26,34 @@
     const covHigh = {{ high_threshold }};
     const covPrecision = {{ precision }};
 
+    // The active coverage metric (line/function/branch) is owned by the page
+    // controller; the chart reads it live so the summary cards can switch the
+    // view. Each node ships every metric's counts, so we just pick the right
+    // fields for size, color, and the hover readout.
+    function curMetric() { return window.coverageMetric || 'line'; }
+    function mPercent(n) {
+        const m = curMetric();
+        if (m === 'function') return n.function_coverage_percent ?? 100;
+        if (m === 'branch') return n.branch_coverage_percent ?? 100;
+        return n.coverage_percent ?? 100;
+    }
+    function mTotal(n) {
+        const m = curMetric();
+        if (m === 'function') return n.total_functions || 0;
+        if (m === 'branch') return n.total_branches || 0;
+        return n.total_lines || 0;
+    }
+    function mCovered(n) {
+        const m = curMetric();
+        if (m === 'function') return n.covered_functions || 0;
+        if (m === 'branch') return n.covered_branches || 0;
+        return n.covered_lines || 0;
+    }
+    function mLabel() {
+        const m = curMetric();
+        return m === 'function' ? 'functions' : m === 'branch' ? 'branches' : 'lines';
+    }
+
     // Color stays inside the three coverage tiers (>=covHigh green, >=covLow
     // amber, else red) — but within each tier the hue shifts with the exact
     // percentage, so e.g. a near-covHigh file is a more saturated yellow than a
@@ -146,15 +174,19 @@
                 nodes.push({ node, depth, a0, a1 });
 
                 if (node.children && node.children.length) {
-                    const total = node.children.reduce((s, c) => s + (c.total_lines || 1), 0);
-                    let angle = a0;
-                    node.children.forEach(child => {
-                        const extent = ((child.total_lines || 1) / total) * (a1 - a0);
-                        if (extent > 0.005) {
-                            collect(child, depth + 1, angle, angle + extent);
-                        }
-                        angle += extent;
-                    });
+                    // Size rings by the active metric; subtrees with none of it
+                    // (e.g. a dir with zero branches in branch view) collapse.
+                    const total = node.children.reduce((s, c) => s + mTotal(c), 0);
+                    if (total > 0) {
+                        let angle = a0;
+                        node.children.forEach(child => {
+                            const extent = (mTotal(child) / total) * (a1 - a0);
+                            if (extent > 0.005) {
+                                collect(child, depth + 1, angle, angle + extent);
+                            }
+                            angle += extent;
+                        });
+                    }
                 }
             }
             collect(rootNode, 0, 0, Math.PI * 2);
@@ -265,17 +297,17 @@
 
                     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                     path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
-                    path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                    path.setAttribute('fill', getCoverageColor(mPercent(node)));
                     path.setAttribute('stroke', 'none');
                     path.style.cursor = 'pointer';
 
                     path.addEventListener('mouseenter', () => {
-                        path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+                        path.setAttribute('fill', getCoverageColor(mPercent(node), 1));
                         showInfo(node);
                     });
 
                     path.addEventListener('mouseleave', () => {
-                        path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                        path.setAttribute('fill', getCoverageColor(mPercent(node)));
                         hideInfo();
                     });
 
@@ -303,18 +335,18 @@
                         if (paddedA1 > paddedA0) {
                             path.setAttribute('d', arcPath(inner, outer, paddedA0, paddedA1));
                         }
-                        path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                        path.setAttribute('fill', getCoverageColor(mPercent(node)));
                         path.setAttribute('stroke', 'none');
                         path.style.cursor = 'pointer';
                         path.style.opacity = '0';
 
                         path.addEventListener('mouseenter', () => {
-                            path.setAttribute('fill', getCoverageColor(node.coverage_percent, 1));
+                            path.setAttribute('fill', getCoverageColor(mPercent(node), 1));
                             showInfo(node);
                         });
 
                         path.addEventListener('mouseleave', () => {
-                            path.setAttribute('fill', getCoverageColor(node.coverage_percent));
+                            path.setAttribute('fill', getCoverageColor(mPercent(node)));
                             hideInfo();
                         });
 
@@ -354,7 +386,7 @@
 
             const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             center.setAttribute('r', innerR - 3);
-            center.setAttribute('fill', getCoverageColor(rootNode.coverage_percent, 0.9));
+            center.setAttribute('fill', getCoverageColor(mPercent(rootNode), 0.9));
             center.setAttribute('class', 'sunburst-center-circle');
             centerG.appendChild(center);
 
@@ -366,7 +398,7 @@
             text.style.fontSize = '28px';
             text.style.fontWeight = '700';
             text.style.pointerEvents = 'none';
-            text.textContent = rootNode.coverage_percent.toFixed(covPrecision) + '%';
+            text.textContent = mPercent(rootNode).toFixed(covPrecision) + '%';
             centerG.appendChild(text);
 
             // Click handler on entire center group - zoom out to parent dir
@@ -404,9 +436,9 @@
 
             info.querySelector('.sunburst-info-path').textContent = node.path || node.name;
             info.querySelector('.sunburst-info-pct').innerHTML =
-                `<span style="color:${getCoverageColor(node.coverage_percent, 1)};font-size:1.5em;font-weight:700">${node.coverage_percent.toFixed(covPrecision)}%</span>`;
+                `<span style="color:${getCoverageColor(mPercent(node), 1)};font-size:1.5em;font-weight:700">${mPercent(node).toFixed(covPrecision)}%</span>`;
             info.querySelector('.sunburst-info-lines').textContent =
-                `${node.covered_lines} / ${node.total_lines} lines covered`;
+                `${mCovered(node)} / ${mTotal(node)} ${mLabel()} covered`;
             info.querySelector('.sunburst-info-hint').textContent =
                 node.is_file ? '🔗 Click to view file' : (node.children?.length ? '🔍 Click to zoom in' : '');
         }
@@ -424,6 +456,10 @@
         // Initial render: whole project, then let the controller pull us to
         // whatever directory the table currently shows.
         render(data);
+
+        // Re-render the current zoom level with the active coverage metric
+        // (summary cards call this); no animation so the recolor/resize is instant.
+        window.sunburstRerender = function() { render(currentRoot, false); };
 
         // Exposed so the modules controller can focus the chart on a directory.
         window.sunburstFocus = function(path, animate = true) {

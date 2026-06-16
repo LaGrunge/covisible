@@ -365,6 +365,40 @@ h3 {
     margin-top: 2px;
 }
 
+/* Clickable coverage-metric cards: picking one drives which metric the
+   sunburst/treemap show (size + color). */
+.metric-card {
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.metric-card:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+.metric-card.metric-active {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-color) inset;
+}
+
+.metric-card.metric-active .stat-label {
+    color: var(--accent-color);
+    font-weight: 700;
+}
+
+.metric-card.metric-active .stat-label::after {
+    content: " ●";
+    font-size: 0.7em;
+    vertical-align: middle;
+}
+
 /* ===== Tab Navigation ===== */
 .tab-nav {
     display: flex;
