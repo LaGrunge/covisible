@@ -1356,9 +1356,13 @@ h3 {
     margin: 0 auto;
 }
 
+/* No CSS opacity transition here: the treemap's fade in/out is driven frame by
+   frame by the rAF FLIP animation (animate() in treemap.html). A CSS transition
+   would lag ~150ms behind those per-frame writes and fight them — fine on a
+   metric switch (cells stay at opacity 1 and only glide) but it made
+   module-to-module navigation flicker as fading cells were removed mid-ease. */
 .treemap-rect {
     cursor: pointer;
-    transition: opacity 0.15s ease;
 }
 
 .treemap-rect:hover {
