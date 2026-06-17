@@ -1354,6 +1354,9 @@ h3 {
     width: 100%;
     height: auto;
     margin: 0 auto;
+    /* Clip cells to the chart box during transitions so a mid-animation rect
+       can never bleed over neighbouring UI. */
+    overflow: hidden;
 }
 
 /* No CSS opacity transition here: the treemap's fade in/out is driven frame by

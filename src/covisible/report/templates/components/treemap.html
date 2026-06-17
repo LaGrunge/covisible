@@ -200,26 +200,33 @@
         rect.setAttribute('height', b.h);
     }
 
+    // Handlers read rect.__node (not a captured arg) so a rect can be re-pointed
+    // to the cell it morphs into during a navigation reflow without rebinding.
     function makeRect(node, r) {
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.setAttribute('class', 'treemap-rect');
         rect.setAttribute('rx', RADIUS);
         rect.setAttribute('ry', RADIUS);
+        rect.__node = node;
         rect.setAttribute('fill', getCoverageColor(mPercent(node)));
         applyRect(rect, r);
         rect.addEventListener('mouseenter', () => {
-            rect.setAttribute('fill', getCoverageColor(mPercent(node), 1));
-            showInfo(node);
+            rect.setAttribute('fill', getCoverageColor(mPercent(rect.__node), 1));
+            showInfo(rect.__node);
         });
         rect.addEventListener('mouseleave', () => {
-            rect.setAttribute('fill', getCoverageColor(mPercent(node)));
+            rect.setAttribute('fill', getCoverageColor(mPercent(rect.__node)));
             hideInfo();
         });
-        rect.addEventListener('click', (e) => handleNodeClick(node, e));
+        rect.addEventListener('click', (e) => handleNodeClick(rect.__node, e));
         return rect;
     }
 
     const lerp = (a, b, t) => a + (b - a) * t;
+    const easeInOutQuad = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    // A touch snappier than quad — gives the drill zoom more "punch" at the
+    // start/end while the in-place metric glide keeps using quad.
+    const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     // Parse the hsla() strings getCoverageColor() emits, so survivor cells can
     // glide their *color* (not just geometry) when the active metric changes.
@@ -232,37 +239,9 @@
                `${lerp(a.l, b.l, t).toFixed(1)}%, ${lerp(a.a, b.a, t).toFixed(3)})`;
     }
 
-    // ---- Path relationship: are we drilling down into a child, popping back up
-    // to an ancestor, switching metric in place, or jumping somewhere unrelated?
-    // The pivot is the child (of whichever directory is the ancestor) we travel
-    // through; its cell box anchors the zoom.
-    function relation(op, np) {
-        op = op || ''; np = np || '';
-        if (op === np) return { dir: 'same' };
-        if (op === '' || np.startsWith(op + '/')) {
-            const rest = op === '' ? np : np.slice(op.length + 1);
-            const seg = rest.split('/')[0];
-            return { dir: 'down', pivot: op === '' ? seg : op + '/' + seg };
-        }
-        if (np === '' || op.startsWith(np + '/')) {
-            const rest = np === '' ? op : op.slice(np.length + 1);
-            const seg = rest.split('/')[0];
-            return { dir: 'up', pivot: np === '' ? seg : np + '/' + seg };
-        }
-        return { dir: 'jump' };
-    }
-
-    // Nest a box from the full SIZE x SIZE canvas inside the pivot's box, so a
-    // whole child layout can start (or end) tucked into the single cell it
-    // belongs to — the heart of the zoom.
-    function mapInto(r, fb) {
-        return {
-            x: fb.x + (r.x / SIZE) * fb.w,
-            y: fb.y + (r.y / SIZE) * fb.h,
-            w: r.w * (fb.w / SIZE),
-            h: r.h * (fb.h / SIZE),
-        };
-    }
+    // Module navigation no longer zooms through a pivot cell; it morphs the
+    // whole mosaic by gliding paired rectangles into the new layout (render()),
+    // so the old pivot/zoom geometry helpers are no longer needed.
 
     // Recover a rect's raw (un-inset) box from its live attributes, so an
     // interrupted transition resumes from exactly what's on screen (true FLIP).
@@ -277,14 +256,16 @@
 
     // One rAF loop drives every transition. Each tween carries its own from/to
     // box, opacity track and optional color track, so a metric switch glides +
-    // recolors in place, a drill-down grows children out of the clicked cell,
-    // and a drill-up shrinks them back into their slot — all the same machinery.
-    function animateTweens(tweens) {
+    // recolors in place, and module navigation morphs the whole mosaic by
+    // gliding paired rectangles into the new layout — all the same machinery.
+    function animateTweens(tweens, opts) {
         if (rafId) cancelAnimationFrame(rafId);
+        const dur = (opts && opts.duration) || animDuration;
+        const ease = (opts && opts.ease) || easeInOutQuad;
         const startT = performance.now();
         function frame(now) {
-            const t = Math.min((now - startT) / animDuration, 1);
-            const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+            const t = Math.min((now - startT) / dur, 1);
+            const e = ease(t);
             tweens.forEach(tw => {
                 applyRect(tw.rect, {
                     x: lerp(tw.from.x, tw.to.x, e), y: lerp(tw.from.y, tw.to.y, e),
@@ -338,59 +319,96 @@
             return;
         }
 
-        // Choose the transition: drill-down/up zoom through the pivot cell's box,
-        // a metric switch glides in place, anything else cross-fades.
-        const rel = relation(oldPath, lastPath);
-        const focusBox = rel.dir === 'down' ? prevLayout.get(rel.pivot)
-                       : rel.dir === 'up' ? next.get(rel.pivot) : null;
-        const zoomDown = rel.dir === 'down' && !!focusBox;
-        const zoomUp = rel.dir === 'up' && !!focusBox;
-
+        // Two native rAF FLIP transitions:
+        //  - same path (metric switch / re-render): identity match — survivors
+        //    glide + recolor in place, gained/lost cells fade where they are.
+        //  - module navigation (drill in/out): the child set is different, so an
+        //    identity match leaves nothing to glide and a crossfade reads flat.
+        //    Instead morph the whole mosaic — pair old & new cells by size rank
+        //    and reuse each rect, gliding + resizing + recoloring it into its
+        //    new slot (the "rectangles move" feel of the metric switch). Extra
+        //    new cells fade in on their spot; extra old cells fade out.
+        const samePath = (oldPath || '') === (lastPath || '');
         const tweens = [];
 
-        // Cells leaving this view: fade out where they are, or — drilling up —
-        // shrink into the slot the old directory occupies inside its parent.
-        cells.forEach((entry, key) => {
-            if (next.has(key)) return;
-            const cur = readRect(entry.rect);
-            tweens.push({
-                rect: entry.rect, key, node: entry.node,
-                from: cur, to: zoomUp ? mapInto(cur, focusBox) : cur,
-                op0: curOpacity(entry.rect), op1: 0, remove: true,
-            });
-        });
-
-        // Cells in the new view: survivors glide (+ recolor on a metric switch);
-        // genuinely new cells fade in, growing out of the clicked cell when
-        // drilling down.
-        layout.forEach(r => {
-            const key = r.node.path || r.node.name;
-            const entry = cells.get(key);
-            if (entry) {
-                const cFrom = parseHsla(entry.rect.getAttribute('fill'));
-                const cTo = parseHsla(getCoverageColor(mPercent(r.node)));
-                const recolor = cFrom && cTo;
+        if (samePath) {
+            cells.forEach((entry, key) => {
+                if (next.has(key)) return;
+                const cur = readRect(entry.rect);
                 tweens.push({
-                    rect: entry.rect, key, node: r.node,
-                    from: readRect(entry.rect), to: r,
-                    op0: curOpacity(entry.rect), op1: 1, remove: false,
-                    cFrom: recolor ? cFrom : null, cTo: recolor ? cTo : null,
+                    rect: entry.rect, key, node: entry.node,
+                    from: cur, to: cur,
+                    op0: curOpacity(entry.rect), op1: 0, remove: true,
                 });
-            } else {
-                const start = zoomDown ? mapInto(r, focusBox) : r;
-                const rect = makeRect(r.node, r);
-                applyRect(rect, start);
-                rect.style.opacity = '0';
-                // Drilling up, keep the shrinking old cells on top of the
-                // incoming parent layout; otherwise let new cells sit in front.
-                if (zoomUp) svg.insertBefore(rect, svg.firstChild);
-                else svg.appendChild(rect);
-                cells.set(key, { rect, node: r.node });
-                tweens.push({ rect, key, node: r.node, from: start, to: r, op0: 0, op1: 1, remove: false });
+            });
+            layout.forEach(r => {
+                const key = r.node.path || r.node.name;
+                const entry = cells.get(key);
+                if (entry) {
+                    const cFrom = parseHsla(entry.rect.getAttribute('fill'));
+                    const cTo = parseHsla(getCoverageColor(mPercent(r.node)));
+                    const recolor = cFrom && cTo;
+                    tweens.push({
+                        rect: entry.rect, key, node: r.node,
+                        from: readRect(entry.rect), to: r,
+                        op0: curOpacity(entry.rect), op1: 1, remove: false,
+                        cFrom: recolor ? cFrom : null, cTo: recolor ? cTo : null,
+                    });
+                } else {
+                    const rect = makeRect(r.node, r);
+                    applyRect(rect, r);
+                    rect.style.opacity = '0';
+                    svg.appendChild(rect);
+                    cells.set(key, { rect, node: r.node });
+                    tweens.push({ rect, key, node: r.node, from: r, to: r, op0: 0, op1: 1, remove: false });
+                }
+            });
+            animateTweens(tweens);
+        } else {
+            // Snapshot the current cells with their live boxes, then pair them
+            // with the new layout by size rank: the biggest old block becomes
+            // the biggest new block, and so on — a smooth reshuffle where every
+            // rectangle travels to its new slot.
+            const oldList = [...cells.values()]
+                .map(e => ({ rect: e.rect, box: readRect(e.rect) }))
+                .sort((a, b) => (b.box.w * b.box.h) - (a.box.w * a.box.h));
+            cells.clear();
+            const n = Math.max(oldList.length, layout.length);
+            for (let i = 0; i < n; i++) {
+                const o = oldList[i];
+                const r = layout[i];
+                if (o && r) {
+                    const key = r.node.path || r.node.name;
+                    const rect = o.rect;
+                    rect.__node = r.node; // re-point hover/click to the cell it becomes
+                    const cFrom = parseHsla(rect.getAttribute('fill'));
+                    const cTo = parseHsla(getCoverageColor(mPercent(r.node)));
+                    const recolor = cFrom && cTo;
+                    tweens.push({
+                        rect, key, node: r.node,
+                        from: o.box, to: r,
+                        op0: curOpacity(rect), op1: 1, remove: false,
+                        cFrom: recolor ? cFrom : null, cTo: recolor ? cTo : null,
+                    });
+                    cells.set(key, { rect, node: r.node });
+                } else if (r) {
+                    const key = r.node.path || r.node.name;
+                    const rect = makeRect(r.node, r);
+                    applyRect(rect, r);
+                    rect.style.opacity = '0';
+                    svg.appendChild(rect);
+                    cells.set(key, { rect, node: r.node });
+                    tweens.push({ rect, key, node: r.node, from: r, to: r, op0: 0, op1: 1, remove: false });
+                } else {
+                    tweens.push({
+                        rect: o.rect, key: '__leave' + i, node: null,
+                        from: o.box, to: o.box,
+                        op0: curOpacity(o.rect), op1: 0, remove: true,
+                    });
+                }
             }
-        });
-
-        animateTweens(tweens);
+            animateTweens(tweens, { ease: easeInOutCubic });
+        }
         prevLayout = next;
     }
 
